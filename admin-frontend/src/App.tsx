@@ -387,16 +387,17 @@ function TestSection() {
   const startScenario = () => {
     setError(null);
     setLoading(true);
-    api('test/start', { method: 'POST' })
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.json();
+    api('test/scenario/start', { method: 'POST' })
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error((data as any)?.message || `Ошибка ${r.status}`);
+        return data as { sessionId: string; initMessage: string };
       })
-      .then((data: { sessionId: string; initMessage: string }) => {
+      .then((data) => {
         setSessionId(data.sessionId);
         setMessages([{ role: 'bot', text: data.initMessage }]);
       })
-      .catch(() => setError('Не удалось запустить сценарий'))
+      .catch((err) => setError(err?.message || 'Не удалось запустить сценарий'))
       .finally(() => setLoading(false));
   };
 
@@ -460,36 +461,35 @@ function TestSection() {
           </button>
         )}
       </div>
-      {!sessionId && messages.length === 0 && (
-        <p className="subtitle" style={{ marginTop: 12 }}>
-          Нажмите «Запустить сценарий» — бот отправит первое сообщение. Отвечайте в поле ниже. Чтобы начать заново — «Завершить сценарий», затем снова «Запустить сценарий».
-        </p>
-      )}
-      {messages.length > 0 && (
-        <div className="chat-area">
-          <div className="chat-messages">
-            {messages.map((msg, i) => (
+      <div className="chat-area">
+        <div className="chat-messages">
+          {messages.length === 0 ? (
+            <p className="chat-placeholder">
+              {sessionId ? 'Напишите сообщение ниже.' : 'Нажмите «Запустить сценарий» — бот отправит первое сообщение. Отвечайте в поле ввода ниже.'}
+            </p>
+          ) : (
+            messages.map((msg, i) => (
               <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
                 <span className="chat-msg-label">{msg.role === 'bot' ? 'Бот' : 'Вы'}</span>
                 <span className="chat-msg-text">{msg.text}</span>
               </div>
-            ))}
-          </div>
-          <form onSubmit={sendMessage} className="chat-form">
-            <input
-              type="text"
-              className="chat-input"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder="Введите ответ..."
-              disabled={!sessionId || loading}
-            />
-            <button type="submit" className="btn btn-primary" disabled={!sessionId || loading || !input.trim()}>
-              Отправить
-            </button>
-          </form>
+            ))
+          )}
         </div>
-      )}
+        <form onSubmit={sendMessage} className="chat-form">
+          <input
+            type="text"
+            className="chat-input"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder={sessionId ? 'Введите ответ...' : 'Сначала нажмите «Запустить сценарий»'}
+            disabled={!sessionId || loading}
+          />
+          <button type="submit" className="btn btn-primary" disabled={!sessionId || loading || !input.trim()}>
+            Отправить
+          </button>
+        </form>
+      </div>
     </section>
   );
 }

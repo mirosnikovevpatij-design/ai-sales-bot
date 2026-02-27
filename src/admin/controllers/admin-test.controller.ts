@@ -13,9 +13,9 @@ export class AdminTestController {
     private readonly dialog: DialogService,
   ) {}
 
-  @Post('start')
+  @Post('scenario/start')
   async start() {
-    const amoDealId = BigInt(999000000 + Math.floor(Math.random() * 1000000));
+    const amoDealId = BigInt(999000000 + (Date.now() % 10000000));
     const phone = '+79000000000';
     const session = await this.prisma.leadSession.create({
       data: {
