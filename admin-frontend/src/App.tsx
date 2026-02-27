@@ -84,32 +84,86 @@ export const App: React.FC = () => {
 };
 
 function ConfigSection() {
-  const [config, setConfig] = useState<SystemConfig | null>(null);
+  const [config, setConfig] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
-  useEffect(() => {
+  const [error, setError] = useState<string | null>(null);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ key: '', value: '' });
+  const load = () => {
+    setError(null);
     fetch('/api/admin/system-config')
       .then((r) => r.json())
       .then(setConfig)
-      .catch(() => setConfig(null))
+      .catch(() => { setConfig(null); setError('Не удалось загрузить конфиг'); })
       .finally(() => setLoading(false));
-  }, []);
+  };
+  useEffect(() => { load(); }, []);
+
+  const addKey = (e: React.FormEvent) => {
+    e.preventDefault();
+    const key = form.key.trim();
+    if (!key) return;
+    const value = form.value.trim() === '' ? null : (() => { try { return JSON.parse(form.value); } catch { return form.value; } })();
+    api('system-config', {
+      method: 'POST',
+      body: JSON.stringify({ key, value }),
+    })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .then(() => { setShowForm(false); setForm({ key: '', value: '' }); })
+      .catch(() => setError('Ошибка сохранения'));
+  };
+
+  const removeKey = (key: string) => {
+    if (!confirm(`Удалить параметр "${key}"?`)) return;
+    api(`system-config/${encodeURIComponent(key)}`, { method: 'DELETE' })
+      .then((r) => r.ok && load());
+  };
+
+  const entries = config && typeof config === 'object' ? Object.entries(config) : [];
   return (
     <section className="card">
       <h2>Системный конфиг</h2>
-      <p className="subtitle">Текущие настройки (только чтение)</p>
-      {loading ? <p className="subtitle">Загрузка…</p> : config ? (
-        <ul className="config-list">
-          <li>
-            <span className="label">Лимит сообщений в минуту</span>
-            <span className="value">{config.rateLimitPerMinute}</span>
-          </li>
-          <li>
-            <span className="label">Задержка инициализации (мин / макс)</span>
-            <span className="value">{config.initRateDelayMin} / {config.initRateDelayMax} сек</span>
-          </li>
-        </ul>
-      ) : (
-        <p className="error-msg">Не удалось загрузить конфиг или бэкенд не запущен.</p>
+      <p className="subtitle">Ключи и значения (добавление и удаление)</p>
+      {error && <p className="error-msg">{error}</p>}
+      {loading ? <p className="subtitle">Загрузка…</p> : (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr><th>Ключ</th><th>Значение</th><th></th></tr>
+              </thead>
+              <tbody>
+                {entries.map(([k, v]) => (
+                  <tr key={k}>
+                    <td>{k}</td>
+                    <td>{typeof v === 'object' ? JSON.stringify(v) : String(v)}</td>
+                    <td>
+                      <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => removeKey(k)}>Удалить</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!showForm ? (
+            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowForm(true)}>Добавить параметр</button>
+          ) : (
+            <form onSubmit={addKey} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <div className="form-row">
+                <label>Ключ</label>
+                <input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} placeholder="rateLimitPerMinute" required />
+              </div>
+              <div className="form-row">
+                <label>Значение (число, строка или JSON)</label>
+                <input value={form.value} onChange={(e) => setForm((f) => ({ ...f, value: e.target.value }))} placeholder="15 или &quot;09:00&quot;" />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary">Добавить</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowForm(false)}>Отмена</button>
+              </div>
+            </form>
+          )}
+        </>
       )}
     </section>
   );
@@ -330,46 +384,84 @@ function SessionsSection() {
       .finally(() => setHandoffId(null));
   };
 
+  const removeSession = (id: string) => {
+    if (!confirm('Удалить сессию и все сообщения?')) return;
+    api(`lead-sessions/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
+  };
+
+  const [showAddSession, setShowAddSession] = useState(false);
+  const [newPhone, setNewPhone] = useState('');
+  const addSession = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPhone.trim()) return;
+    api('lead-sessions', {
+      method: 'POST',
+      body: JSON.stringify({ phone: newPhone.trim() }),
+    })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .then(() => { setShowAddSession(false); setNewPhone(''); })
+      .catch(() => {});
+  };
+
   const safeList = Array.isArray(list) ? list : [];
   return (
     <section className="card">
       <h2>Сессии лидов</h2>
-      <p className="subtitle">Последние диалоги (до 50)</p>
+      <p className="subtitle">Последние диалоги (до 50). Управление: добавить или удалить.</p>
       {error && <p className="error-msg">{error}</p>}
       {loading ? <p className="subtitle">Загрузка…</p> : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Телефон</th>
-                <th>Статус</th>
-                <th>Создана</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {safeList.map((s, i) => (
-                <tr key={s?.id ?? `s-${i}`}>
-                  <td>{s?.phoneMasked || s?.phone || '—'}</td>
-                  <td><span className="badge badge-muted">{s?.status ?? '—'}</span></td>
-                  <td>{formatDate(s?.createdAt)}</td>
-                  <td>
-                    {s?.id && s?.status !== 'HANDOFF_TO_HUMAN' && (
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        disabled={handoffId === s.id}
-                        onClick={() => handoff(s.id)}
-                      >
-                        {handoffId === s.id ? '…' : 'Эскалация'}
-                      </button>
-                    )}
-                  </td>
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Телефон</th>
+                  <th>Статус</th>
+                  <th>Создана</th>
+                  <th></th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {safeList.map((s, i) => (
+                  <tr key={s?.id ?? `s-${i}`}>
+                    <td>{s?.phoneMasked || s?.phone || '—'}</td>
+                    <td><span className="badge badge-muted">{s?.status ?? '—'}</span></td>
+                    <td>{formatDate(s?.createdAt)}</td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {s?.id && s?.status !== 'HANDOFF_TO_HUMAN' && (
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm"
+                          disabled={handoffId === s.id}
+                          onClick={() => handoff(s.id)}
+                        >
+                          {handoffId === s.id ? '…' : 'Эскалация'}
+                        </button>
+                      )}
+                      {s?.id && (
+                        <button type="button" className="btn btn-ghost btn-sm btn-danger" style={{ marginLeft: '0.25rem' }} onClick={() => removeSession(s.id)}>Удалить</button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!showAddSession ? (
+            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowAddSession(true)}>Добавить сессию</button>
+          ) : (
+            <form onSubmit={addSession} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <div className="form-row">
+                <label>Телефон</label>
+                <input value={newPhone} onChange={(e) => setNewPhone(e.target.value)} placeholder="+77001234567" required />
+              </div>
+              <div className="form-actions">
+                <button type="submit" className="btn btn-primary">Добавить</button>
+                <button type="button" className="btn btn-ghost" onClick={() => setShowAddSession(false)}>Отмена</button>
+              </div>
+            </form>
+          )}
+        </>
       )}
     </section>
   );
