@@ -10,7 +10,7 @@ export const App: React.FC = () => {
   const [config, setConfig] = useState<SystemConfig | null>(null);
 
   useEffect(() => {
-    fetch('http://localhost:3000/api/admin/system-config')
+    fetch('/api/admin/system-config')
       .then((res) => res.json())
       .then(setConfig)
       .catch(() => {
