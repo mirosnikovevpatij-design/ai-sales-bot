@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import './index.css';
+import { ErrorBoundary } from './ErrorBoundary';
 
 type Tab = 'config' | 'managers' | 'stoplist' | 'sessions';
 
@@ -59,10 +60,12 @@ export const App: React.FC = () => {
           <button className={tab === 'sessions' ? 'active' : ''} onClick={() => setTab('sessions')}>Сессии</button>
         </nav>
 
-        {tab === 'config' && <ConfigSection />}
-        {tab === 'managers' && <ManagersSection />}
-        {tab === 'stoplist' && <StopListSection />}
-        {tab === 'sessions' && <SessionsSection />}
+        <div className="tab-content" style={{ minHeight: 200 }}>
+          {tab === 'config' && <ErrorBoundary><ConfigSection /></ErrorBoundary>}
+          {tab === 'managers' && <ErrorBoundary><ManagersSection /></ErrorBoundary>}
+          {tab === 'stoplist' && <ErrorBoundary><StopListSection /></ErrorBoundary>}
+          {tab === 'sessions' && <ErrorBoundary><SessionsSection /></ErrorBoundary>}
+        </div>
       </main>
     </div>
   );
@@ -160,13 +163,15 @@ function ManagersSection() {
               </thead>
               <tbody>
                 {safeList.map((m) => (
-                  <tr key={m.id}>
-                    <td>{String(m.amoUserId)}</td>
-                    <td>{m.name}</td>
-                    <td>{m.whatsappPhone || '—'}</td>
-                    <td>{m.active ? <span className="badge badge-success">да</span> : <span className="badge badge-muted">нет</span>}</td>
+                  <tr key={m?.id ?? Math.random()}>
+                    <td>{m ? String(m.amoUserId ?? '') : '—'}</td>
+                    <td>{m?.name ?? '—'}</td>
+                    <td>{m?.whatsappPhone || '—'}</td>
+                    <td>{m?.active ? <span className="badge badge-success">да</span> : <span className="badge badge-muted">нет</span>}</td>
                     <td>
-                      <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => remove(m.id)}>Удалить</button>
+                      {m?.id != null && (
+                        <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => remove(m.id)}>Удалить</button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -263,11 +268,13 @@ function StopListSection() {
               </thead>
               <tbody>
                 {safeList.map((e) => (
-                  <tr key={e.id}>
-                    <td>{e.phone}</td>
-                    <td>{e.reason}</td>
+                  <tr key={e?.id ?? e?.phone ?? Math.random()}>
+                    <td>{e?.phone ?? '—'}</td>
+                    <td>{e?.reason ?? '—'}</td>
                     <td>
-                      <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => remove(e.phone)}>Удалить</button>
+                      {e?.phone && (
+                        <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => remove(e.phone)}>Удалить</button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -321,12 +328,12 @@ function SessionsSection() {
             </thead>
             <tbody>
               {safeList.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.phoneMasked || s.phone}</td>
-                  <td><span className="badge badge-muted">{s.status}</span></td>
-                  <td>{new Date(s.createdAt).toLocaleString('ru')}</td>
+                <tr key={s?.id ?? Math.random()}>
+                  <td>{s?.phoneMasked || s?.phone || '—'}</td>
+                  <td><span className="badge badge-muted">{s?.status ?? '—'}</span></td>
+                  <td>{s?.createdAt ? new Date(s.createdAt).toLocaleString('ru') : '—'}</td>
                   <td>
-                    {s.status !== 'HANDOFF_TO_HUMAN' && (
+                    {s?.id && s?.status !== 'HANDOFF_TO_HUMAN' && (
                       <button
                         type="button"
                         className="btn btn-primary btn-sm"
