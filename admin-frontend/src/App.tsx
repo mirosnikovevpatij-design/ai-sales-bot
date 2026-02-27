@@ -122,7 +122,10 @@ function ManagersSection() {
   const load = () => {
     setError(null);
     api('managers')
-      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => { setList([]); setError('Не удалось загрузить список'); })
       .finally(() => setLoading(false));
@@ -152,7 +155,7 @@ function ManagersSection() {
     api(`managers/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
   };
 
-  const safeList = Array.isArray(list) ? list : [];
+  const safeList: Manager[] = Array.isArray(list) ? list : [];
   return (
     <section className="card">
       <h2>Менеджеры</h2>
@@ -228,7 +231,10 @@ function StopListSection() {
   const load = () => {
     setError(null);
     api('stop-list')
-      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => { setList([]); setError('Не удалось загрузить стоп-лист'); })
       .finally(() => setLoading(false));
@@ -305,7 +311,10 @@ function SessionsSection() {
   const load = () => {
     setError(null);
     api('lead-sessions')
-      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
       .then((data) => setList(Array.isArray(data) ? data : []))
       .catch(() => { setList([]); setError('Не удалось загрузить сессии'); })
       .finally(() => setLoading(false));

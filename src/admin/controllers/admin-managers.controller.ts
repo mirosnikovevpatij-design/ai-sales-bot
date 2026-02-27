@@ -8,7 +8,11 @@ export class AdminManagersController {
   @Get()
   async list() {
     const rows = await this.prisma.manager.findMany({ orderBy: { id: 'asc' } });
-    return rows.map((m) => ({ ...m, amoUserId: String(m.amoUserId) }));
+    return rows.map((m) => ({
+      ...m,
+      amoUserId: String(m.amoUserId),
+      telegramId: m.telegramId != null ? String(m.telegramId) : null,
+    }));
   }
 
   @Post()
@@ -35,7 +39,11 @@ export class AdminManagersController {
         weight: body.weight ?? 1,
       },
     });
-    return { ...row, amoUserId: String(row.amoUserId) };
+    return {
+      ...row,
+      amoUserId: String(row.amoUserId),
+      telegramId: row.telegramId != null ? String(row.telegramId) : null,
+    };
   }
 
   @Put(':id')
@@ -62,7 +70,11 @@ export class AdminManagersController {
         ...(body.weight != null && { weight: body.weight }),
       },
     });
-    return { ...row, amoUserId: String(row.amoUserId) };
+    return {
+      ...row,
+      amoUserId: String(row.amoUserId),
+      telegramId: row.telegramId != null ? String(row.telegramId) : null,
+    };
   }
 
   @Delete(':id')
