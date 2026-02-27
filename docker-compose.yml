@@ -1,0 +1,19 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ai_bot
+      POSTGRES_PASSWORD: ai_bot_password
+      POSTGRES_DB: ai_sales_bot
+    ports:
+      - "5433:5432"
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+

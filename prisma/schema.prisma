@@ -1,0 +1,126 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model LeadSession {
+  id                     String   @id @default(uuid())
+  amoDealId              BigInt   @unique
+  amoContactId           BigInt?
+  phone                  String
+  conversationId         String?
+  status                 LeadSessionStatus
+  clientLanguage         ClientLanguage?
+  conversationStateJson  Json?
+  assignedManagerId      Int?
+  handoffReason          String?
+  handoffAt              DateTime?
+  lastClientMessageAt    DateTime?
+  lastBotMessageAt       DateTime?
+  initMessageId          String?
+  initSentAt             DateTime?
+  source                 String?
+  proposedSlots          Json?
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  messages   Message[]
+  initQueues InitQueue[]
+}
+
+model Message {
+  id                 String        @id @default(uuid())
+  leadSessionId      String
+  direction          MessageDirection
+  channel            MessageChannel
+  messageType        MessageType
+  text               String?
+  externalMessageId  String?       @unique
+  status             MessageStatus
+  statusUpdatedAt    DateTime?
+  llmPromptTokens    Int?
+  llmCompletionTokens Int?
+  ragScore           Float?
+  language           ClientLanguage?
+  createdAt          DateTime      @default(now())
+
+  leadSession LeadSession @relation(fields: [leadSessionId], references: [id], onDelete: Cascade)
+}
+
+model InitQueue {
+  id            String          @id @default(uuid())
+  leadSessionId String
+  idempotencyKey String        @unique
+  runAfter      DateTime
+  attempts      Int            @default(0)
+  maxAttempts   Int            @default(3)
+  lastError     String?
+  status        QueueStatus
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+
+  leadSession LeadSession @relation(fields: [leadSessionId], references: [id], onDelete: Cascade)
+}
+
+enum LeadSessionStatus {
+  PENDING_INIT
+  INIT_SENT
+  ENGAGED
+  QUALIFYING
+  PRESENTING
+  OBJECTION_HANDLING
+  SCHEDULING_ZOOM
+  ZOOM_BOOKED
+  FOLLOWUP_1
+  FOLLOWUP_2
+  FOLLOWUP_3
+  HANDOFF_TO_HUMAN
+  INIT_FAILED
+  CLOSED
+}
+
+enum ClientLanguage {
+  RU
+  KZ
+  SHALAKAZ
+  OTHER
+}
+
+enum MessageDirection {
+  IN
+  OUT
+}
+
+enum MessageChannel {
+  WHATSAPP
+}
+
+enum MessageType {
+  text
+  image
+  audio
+  video
+  document
+  sticker
+  deleted
+}
+
+enum MessageStatus {
+  SENT
+  DELIVERED
+  READ
+  FAILED
+  UNKNOWN
+}
+
+enum QueueStatus {
+  PENDING
+  PROCESSING
+  DONE
+  FAILED
+}
+

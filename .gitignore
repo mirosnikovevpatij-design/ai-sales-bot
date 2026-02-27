@@ -1,0 +1,31 @@
+# Зависимости
+node_modules/
+
+# Локальные env с ключами (не коммитить!)
+.env
+.env.local
+.env.*.local
+
+# Сборка
+dist/
+build/
+*.tsbuildinfo
+
+# Логи и кэш
+npm-debug.log*
+.npm
+.cache
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Admin frontend
+admin-frontend/dist/
+admin-frontend/node_modules/
