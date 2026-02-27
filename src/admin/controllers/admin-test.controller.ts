@@ -1,4 +1,4 @@
-import { Body, Controller, Param, Post } from '@nestjs/common';
+import { Body, Controller, HttpException, Param, Post } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 import { DialogService } from '../../dialog/dialog.service';
 import { LeadSessionStatus } from '@prisma/client';
@@ -15,16 +15,17 @@ export class AdminTestController {
 
   @Post('scenario/start')
   async start() {
-    const amoDealId = BigInt(999000000 + (Date.now() % 10000000));
-    const phone = '+79000000000';
-    const session = await this.prisma.leadSession.create({
-      data: {
-        amoDealId,
-        phone,
-        status: LeadSessionStatus.INIT_SENT,
-        initSentAt: new Date(),
-      },
-    });
+    try {
+      const amoDealId = BigInt(999000000 + (Date.now() % 10000000));
+      const phone = '+79000000000';
+      const session = await this.prisma.leadSession.create({
+        data: {
+          amoDealId,
+          phone,
+          status: LeadSessionStatus.INIT_SENT,
+          initSentAt: new Date(),
+        },
+      });
     await this.prisma.message.create({
       data: {
         leadSessionId: session.id,
@@ -39,10 +40,17 @@ export class AdminTestController {
       where: { id: session.id },
       data: { lastBotMessageAt: new Date() },
     });
-    return {
-      sessionId: session.id,
-      initMessage: TEST_INIT_MESSAGE,
-    };
+      return {
+        sessionId: session.id,
+        initMessage: TEST_INIT_MESSAGE,
+      };
+    } catch (err: any) {
+      const message = err?.message || String(err);
+      throw new HttpException(
+        { message: `Ошибка запуска сценария: ${message}` },
+        500,
+      );
+    }
   }
 
   @Post(':sessionId/send')
