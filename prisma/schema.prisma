@@ -172,6 +172,19 @@ enum FollowupStatus {
   FAILED
 }
 
+model FollowupTemplate {
+  id         Int             @id @default(autoincrement())
+  step       Int
+  language   ClientLanguage  @default(RU)
+  variant    String          @default("A")
+  content    String          @db.Text
+  isActive   Boolean         @default(true)
+  createdAt  DateTime        @default(now())
+  updatedAt  DateTime        @updatedAt
+
+  @@unique([step, language, variant])
+}
+
 model OffHoursQueue {
   id               String   @id @default(uuid())
   leadSessionId    String
@@ -216,7 +229,8 @@ model KnowledgeDocument {
   id               String    @id @default(uuid())
   filename         String
   fileType         KnowledgeFileType
-  storagePath      String
+  storagePath      String    @default("")
+  content          String?   @db.Text
   indexingStatus   KnowledgeIndexingStatus @default(PENDING)
   fragmentCount    Int       @default(0)
   errorMessage     String?

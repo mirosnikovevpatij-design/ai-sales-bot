@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
-import { FollowupStatus } from '@prisma/client';
+import { ClientLanguage, FollowupStatus } from '@prisma/client';
 
-const FOLLOWUP_TEXTS: Record<number, string> = {
+const FALLBACK_TEXTS: Record<number, string> = {
   1: 'Подскажите, актуально ли вам сейчас увеличить поток заявок через автообзвоны?',
   2: 'Могу рассказать, какие ниши сейчас лучше всего заходят и какие цифры по конверсии.',
   3: 'Не буду отвлекать. Когда тема автообзвонов снова станет актуальной — просто напишите "актуально".',
@@ -13,6 +13,21 @@ export class FollowupService {
   private readonly logger = new Logger(FollowupService.name);
 
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Текст шаблона по шагу, языку сессии и варианту (A/B). */
+  async getTemplateText(
+    step: 1 | 2 | 3,
+    language: ClientLanguage | null,
+    variant: string = 'A',
+  ): Promise<string> {
+    const lang = language ?? 'RU';
+    const v = variant === 'B' ? 'B' : 'A';
+    const template = await this.prisma.followupTemplate.findFirst({
+      where: { step, language: lang, variant: v, isActive: true },
+    });
+    if (template?.content) return template.content;
+    return FALLBACK_TEXTS[step] ?? FALLBACK_TEXTS[1];
+  }
 
   async scheduleFollowup(leadSessionId: string, step: 1 | 2 | 3, dueAt: Date) {
     return this.prisma.followup.create({
@@ -42,7 +57,11 @@ export class FollowupService {
 
     for (const f of due) {
       try {
-        const text = FOLLOWUP_TEXTS[f.step] ?? FOLLOWUP_TEXTS[1];
+        const text = await this.getTemplateText(
+          f.step as 1 | 2 | 3,
+          f.leadSession.clientLanguage,
+          f.templateVariant ?? 'A',
+        );
         const msg = await this.prisma.message.create({
           data: {
             leadSessionId: f.leadSessionId,

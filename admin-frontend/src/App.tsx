@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './index.css';
 import { ErrorBoundary } from './ErrorBoundary';
 
-type Tab = 'config' | 'managers' | 'stoplist' | 'sessions' | 'test';
+type Tab = 'config' | 'managers' | 'stoplist' | 'sessions' | 'knowledge' | 'prompts' | 'followup' | 'test';
 
 type SystemConfig = {
   rateLimitPerMinute: number;
@@ -68,6 +68,9 @@ export const App: React.FC = () => {
           <button className={tab === 'managers' ? 'active' : ''} onClick={() => setTab('managers')}>Менеджеры</button>
           <button className={tab === 'stoplist' ? 'active' : ''} onClick={() => setTab('stoplist')}>Стоп-лист</button>
           <button className={tab === 'sessions' ? 'active' : ''} onClick={() => setTab('sessions')}>Сессии</button>
+          <button className={tab === 'knowledge' ? 'active' : ''} onClick={() => setTab('knowledge')}>База знаний</button>
+          <button className={tab === 'prompts' ? 'active' : ''} onClick={() => setTab('prompts')}>Промпты</button>
+          <button className={tab === 'followup' ? 'active' : ''} onClick={() => setTab('followup')}>Follow-up</button>
           <button className={tab === 'test' ? 'active' : ''} onClick={() => setTab('test')}>Тестирование бота</button>
         </nav>
 
@@ -76,6 +79,9 @@ export const App: React.FC = () => {
           {tab === 'managers' && <ErrorBoundary><ManagersSection /></ErrorBoundary>}
           {tab === 'stoplist' && <ErrorBoundary><StopListSection /></ErrorBoundary>}
           {tab === 'sessions' && <ErrorBoundary><SessionsSection /></ErrorBoundary>}
+          {tab === 'knowledge' && <ErrorBoundary><KnowledgeSection /></ErrorBoundary>}
+          {tab === 'prompts' && <ErrorBoundary><PromptsSection /></ErrorBoundary>}
+          {tab === 'followup' && <ErrorBoundary><FollowupTemplatesSection /></ErrorBoundary>}
           {tab === 'test' && <ErrorBoundary><TestSection /></ErrorBoundary>}
         </div>
       </main>
@@ -459,6 +465,280 @@ function SessionsSection() {
                 <button type="submit" className="btn btn-primary">Добавить</button>
                 <button type="button" className="btn btn-ghost" onClick={() => setShowAddSession(false)}>Отмена</button>
               </div>
+            </form>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function KnowledgeSection() {
+  const [docs, setDocs] = useState<{ id: string; filename: string; indexingStatus: string; fragmentCount: number; uploadedAt: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ filename: '', content: '' });
+  const [testQuery, setTestQuery] = useState('');
+  const [testResults, setTestResults] = useState<{ query: string; results: { content: string; score: number }[] } | null>(null);
+  const load = () => {
+    setError(null);
+    api('knowledge/documents')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: any) => setDocs(Array.isArray(data) ? data : []))
+      .catch(() => setError('Не удалось загрузить документы'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const addDoc = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.filename.trim()) return;
+    api('knowledge/documents', {
+      method: 'POST',
+      body: JSON.stringify({ filename: form.filename.trim(), fileType: 'md', content: form.content.trim() || undefined }),
+    })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .then(() => { setShowAdd(false); setForm({ filename: '', content: '' }); })
+      .catch(() => {});
+  };
+
+  const reindex = (id: string) => {
+    api(`knowledge/documents/${id}/reindex`, { method: 'POST' })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .catch(() => {});
+  };
+
+  const removeDoc = (id: string) => {
+    if (!confirm('Удалить документ и все фрагменты?')) return;
+    api(`knowledge/documents/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
+  };
+
+  const runTestRag = (e: React.FormEvent) => {
+    e.preventDefault();
+    const q = testQuery.trim() || 'тест';
+    api('knowledge/test-rag', { method: 'POST', body: JSON.stringify({ query: q }) })
+      .then((r) => r.json())
+      .then(setTestResults)
+      .catch(() => setTestResults(null));
+  };
+
+  return (
+    <section className="card">
+      <h2>База знаний</h2>
+      <p className="subtitle">Загрузка документов, индексирование в фрагменты, тест RAG.</p>
+      {error && <p className="error-msg">{error}</p>}
+      {loading ? <p className="subtitle">Загрузка…</p> : (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Файл</th><th>Статус</th><th>Фрагментов</th><th>Загружен</th><th></th></tr></thead>
+              <tbody>
+                {docs.map((d) => (
+                  <tr key={d.id}>
+                    <td>{d.filename}</td>
+                    <td><span className="badge badge-muted">{d.indexingStatus}</span></td>
+                    <td>{d.fragmentCount ?? 0}</td>
+                    <td>{formatDate(d.uploadedAt)}</td>
+                    <td>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => reindex(d.id)}>Переиндексировать</button>
+                      <button type="button" className="btn btn-ghost btn-sm btn-danger" style={{ marginLeft: '0.25rem' }} onClick={() => removeDoc(d.id)}>Удалить</button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!showAdd ? (
+            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowAdd(true)}>Добавить документ</button>
+          ) : (
+            <form onSubmit={addDoc} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <div className="form-row"><label>Имя документа</label><input value={form.filename} onChange={(e) => setForm((f) => ({ ...f, filename: e.target.value }))} placeholder="faq.md" required /></div>
+              <div className="form-row"><label>Текст (или вставка)</label><textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} placeholder="Текст для разбиения на фрагменты…" rows={6} style={{ width: '100%' }} /></div>
+              <div className="form-actions"><button type="submit" className="btn btn-primary">Добавить и проиндексировать</button><button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)}>Отмена</button></div>
+            </form>
+          )}
+          <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+            <h3 style={{ marginBottom: '0.5rem', fontSize: '0.95rem' }}>Тест RAG</h3>
+            <form onSubmit={runTestRag} style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
+              <div className="form-row" style={{ marginBottom: 0 }}><label>Запрос</label><input value={testQuery} onChange={(e) => setTestQuery(e.target.value)} placeholder="Вопрос для поиска по базе" style={{ minWidth: 200 }} /></div>
+              <button type="submit" className="btn btn-primary">Искать</button>
+            </form>
+            {testResults && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <p className="subtitle">Результаты по запросу «{testResults.query}»:</p>
+                <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>{testResults.results?.slice(0, 5).map((r, i) => <li key={i}>{r.content?.slice(0, 150)}{r.content && r.content.length > 150 ? '…' : ''} (score: {r.score})</li>) ?? []}</ul>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+    </section>
+  );
+}
+
+function PromptsSection() {
+  const [groups, setGroups] = useState<{ key: string; versions: { id: number; version: number; isActive: boolean; isAbTest: boolean; abTrafficPercent: number | null; content: string; createdAt: string }[] }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ key: '', content: '' });
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editContent, setEditContent] = useState('');
+  const load = () => {
+    setError(null);
+    api('prompts')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setGroups)
+      .catch(() => setError('Не удалось загрузить промпты'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const addPrompt = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.key.trim()) return;
+    api('prompts', { method: 'POST', body: JSON.stringify({ key: form.key.trim(), content: form.content }) })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .then(() => { setShowAdd(false); setForm({ key: '', content: '' }); })
+      .catch(() => {});
+  };
+
+  const setActive = (id: number, isActive: boolean) => {
+    api(`prompts/${id}/active`, { method: 'PATCH', body: JSON.stringify({ isActive }) }).then((r) => r.ok && load());
+  };
+
+  const setAbTest = (id: number, isAbTest: boolean, abTrafficPercent?: number) => {
+    api(`prompts/${id}/ab-test`, { method: 'PATCH', body: JSON.stringify({ isAbTest, abTrafficPercent }) }).then((r) => r.ok && load());
+  };
+
+  const saveEdit = () => {
+    if (editingId == null) return;
+    api(`prompts/${editingId}`, { method: 'PUT', body: JSON.stringify({ content: editContent }) })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .then(() => { setEditingId(null); setEditContent(''); })
+      .catch(() => {});
+  };
+
+  const removePrompt = (id: number) => {
+    if (!confirm('Удалить эту версию промпта?')) return;
+    api(`prompts/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
+  };
+
+  return (
+    <section className="card">
+      <h2>Промпты</h2>
+      <p className="subtitle">Версионирование и A/B тесты. Активная версия используется в диалоге.</p>
+      {error && <p className="error-msg">{error}</p>}
+      {loading ? <p className="subtitle">Загрузка…</p> : (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Ключ</th><th>Версия</th><th>Активен</th><th>A/B</th><th>Создан</th><th></th></tr></thead>
+              <tbody>
+                {groups.flatMap((g) => g.versions.map((v) => (
+                  <tr key={v.id}>
+                    <td>{g.key}</td>
+                    <td>{v.version}</td>
+                    <td>{v.isActive ? <span className="badge badge-success">да</span> : <span className="badge badge-muted">нет</span>}</td>
+                    <td>{v.isAbTest ? `B ${v.abTrafficPercent ?? 50}%` : 'A'}</td>
+                    <td>{formatDate(v.createdAt)}</td>
+                    <td>
+                      {!v.isActive && <button type="button" className="btn btn-primary btn-sm" onClick={() => setActive(v.id, true)}>Сделать активным</button>}
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditingId(v.id); setEditContent(v.content); }}>Редактировать</button>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAbTest(v.id, !v.isAbTest, v.abTrafficPercent ?? 50)}>{v.isAbTest ? 'Выкл A/B' : 'Вкл A/B'}</button>
+                      <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => removePrompt(v.id)}>Удалить</button>
+                    </td>
+                  </tr>
+                )))}
+              </tbody>
+            </table>
+          </div>
+          {editingId != null && (
+            <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <h3 style={{ fontSize: '0.95rem' }}>Редактирование контента</h3>
+              <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={8} style={{ width: '100%', marginTop: '0.5rem' }} />
+              <div className="form-actions" style={{ marginTop: '0.5rem' }}><button type="button" className="btn btn-primary" onClick={saveEdit}>Сохранить</button><button type="button" className="btn btn-ghost" onClick={() => { setEditingId(null); setEditContent(''); }}>Отмена</button></div>
+            </div>
+          )}
+          {!showAdd ? (
+            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowAdd(true)}>Добавить промпт (новая версия)</button>
+          ) : (
+            <form onSubmit={addPrompt} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <div className="form-row"><label>Ключ (уникальный)</label><input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} placeholder="system_seller" required /></div>
+              <div className="form-row"><label>Текст промпта</label><textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} rows={6} style={{ width: '100%' }} /></div>
+              <div className="form-actions"><button type="submit" className="btn btn-primary">Добавить</button><button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)}>Отмена</button></div>
+            </form>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
+function FollowupTemplatesSection() {
+  const [data, setData] = useState<{ templates: { id: number; step: number; language: string; variant: string; content: string; isActive: boolean }[]; languages: string[]; variants: string[]; steps: number[] } | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [form, setForm] = useState({ step: 1, language: 'RU', variant: 'A', content: '' });
+  const load = () => {
+    setError(null);
+    api('followup-templates')
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then(setData)
+      .catch(() => setError('Не удалось загрузить шаблоны'))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const addTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.content.trim()) return;
+    api('followup-templates', { method: 'POST', body: JSON.stringify(form) })
+      .then((r) => r.ok ? load() : Promise.reject())
+      .then(() => { setShowAdd(false); setForm({ step: 1, language: 'RU', variant: 'A', content: '' }); })
+      .catch(() => {});
+  };
+
+  const removeTemplate = (id: number) => {
+    if (!confirm('Удалить шаблон?')) return;
+    api(`followup-templates/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
+  };
+
+  const list = data?.templates ?? [];
+  return (
+    <section className="card">
+      <h2>Шаблоны follow-up</h2>
+      <p className="subtitle">Мультиязычность (RU, KZ, SHALAKAZ) и варианты A/B по шагам 1–3.</p>
+      {error && <p className="error-msg">{error}</p>}
+      {loading ? <p className="subtitle">Загрузка…</p> : (
+        <>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Шаг</th><th>Язык</th><th>Вариант</th><th>Текст</th><th></th></tr></thead>
+              <tbody>
+                {list.map((t) => (
+                  <tr key={t.id}>
+                    <td>{t.step}</td>
+                    <td>{t.language}</td>
+                    <td>{t.variant}</td>
+                    <td style={{ maxWidth: 280 }}>{t.content?.slice(0, 80)}{t.content && t.content.length > 80 ? '…' : ''}</td>
+                    <td><button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => removeTemplate(t.id)}>Удалить</button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!showAdd ? (
+            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowAdd(true)}>Добавить шаблон</button>
+          ) : (
+            <form onSubmit={addTemplate} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+              <div className="form-row"><label>Шаг</label><select value={form.step} onChange={(e) => setForm((f) => ({ ...f, step: Number(e.target.value) }))}><option value={1}>1</option><option value={2}>2</option><option value={3}>3</option></select></div>
+              <div className="form-row"><label>Язык</label><select value={form.language} onChange={(e) => setForm((f) => ({ ...f, language: e.target.value }))}><option value="RU">RU</option><option value="KZ">KZ</option><option value="SHALAKAZ">SHALAKAZ</option><option value="OTHER">OTHER</option></select></div>
+              <div className="form-row"><label>Вариант</label><select value={form.variant} onChange={(e) => setForm((f) => ({ ...f, variant: e.target.value }))}><option value="A">A</option><option value="B">B</option></select></div>
+              <div className="form-row"><label>Текст сообщения</label><textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} rows={4} style={{ width: '100%' }} required /></div>
+              <div className="form-actions"><button type="submit" className="btn btn-primary">Добавить</button><button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)}>Отмена</button></div>
             </form>
           )}
         </>
