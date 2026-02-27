@@ -42,6 +42,16 @@ type LeadSession = {
 const api = (path: string, opts?: RequestInit) =>
   fetch(`/api/admin/${path}`, { ...opts, headers: { 'Content-Type': 'application/json', ...opts?.headers } });
 
+function formatDate(value: string | null | undefined): string {
+  if (value == null || value === '') return '—';
+  try {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleString('ru');
+  } catch {
+    return '—';
+  }
+}
+
 export const App: React.FC = () => {
   const [tab, setTab] = useState<Tab>('config');
 
@@ -162,8 +172,8 @@ function ManagersSection() {
                 </tr>
               </thead>
               <tbody>
-                {safeList.map((m) => (
-                  <tr key={m?.id ?? Math.random()}>
+                {safeList.map((m, i) => (
+                  <tr key={m?.id != null ? m.id : `m-${i}`}>
                     <td>{m ? String(m.amoUserId ?? '') : '—'}</td>
                     <td>{m?.name ?? '—'}</td>
                     <td>{m?.whatsappPhone || '—'}</td>
@@ -267,8 +277,8 @@ function StopListSection() {
                 <tr><th>Телефон</th><th>Причина</th><th></th></tr>
               </thead>
               <tbody>
-                {safeList.map((e) => (
-                  <tr key={e?.id ?? e?.phone ?? Math.random()}>
+                {safeList.map((e, i) => (
+                  <tr key={e?.phone ?? e?.id ?? `e-${i}`}>
                     <td>{e?.phone ?? '—'}</td>
                     <td>{e?.reason ?? '—'}</td>
                     <td>
@@ -327,11 +337,11 @@ function SessionsSection() {
               </tr>
             </thead>
             <tbody>
-              {safeList.map((s) => (
-                <tr key={s?.id ?? Math.random()}>
+              {safeList.map((s, i) => (
+                <tr key={s?.id ?? `s-${i}`}>
                   <td>{s?.phoneMasked || s?.phone || '—'}</td>
                   <td><span className="badge badge-muted">{s?.status ?? '—'}</span></td>
-                  <td>{s?.createdAt ? new Date(s.createdAt).toLocaleString('ru') : '—'}</td>
+                  <td>{formatDate(s?.createdAt)}</td>
                   <td>
                     {s?.id && s?.status !== 'HANDOFF_TO_HUMAN' && (
                       <button
