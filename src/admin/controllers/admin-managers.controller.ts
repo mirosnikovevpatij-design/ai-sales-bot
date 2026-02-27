@@ -7,7 +7,8 @@ export class AdminManagersController {
 
   @Get()
   async list() {
-    return this.prisma.manager.findMany({ orderBy: { id: 'asc' } });
+    const rows = await this.prisma.manager.findMany({ orderBy: { id: 'asc' } });
+    return rows.map((m) => ({ ...m, amoUserId: String(m.amoUserId) }));
   }
 
   @Post()
@@ -23,7 +24,7 @@ export class AdminManagersController {
       weight?: number;
     },
   ) {
-    return this.prisma.manager.create({
+    const row = await this.prisma.manager.create({
       data: {
         amoUserId: BigInt(body.amoUserId),
         name: body.name,
@@ -34,6 +35,7 @@ export class AdminManagersController {
         weight: body.weight ?? 1,
       },
     });
+    return { ...row, amoUserId: String(row.amoUserId) };
   }
 
   @Put(':id')
@@ -49,7 +51,7 @@ export class AdminManagersController {
       weight?: number;
     },
   ) {
-    return this.prisma.manager.update({
+    const row = await this.prisma.manager.update({
       where: { id: parseInt(id, 10) },
       data: {
         ...(body.name != null && { name: body.name }),
@@ -60,6 +62,7 @@ export class AdminManagersController {
         ...(body.weight != null && { weight: body.weight }),
       },
     });
+    return { ...row, amoUserId: String(row.amoUserId) };
   }
 
   @Delete(':id')

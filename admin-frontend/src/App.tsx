@@ -103,9 +103,17 @@ function ConfigSection() {
 function ManagersSection() {
   const [list, setList] = useState<Manager[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ amoUserId: '', name: '', whatsappPhone: '', active: true });
-  const load = () => api('managers').then((r) => r.json()).then(setList).finally(() => setLoading(false));
+  const load = () => {
+    setError(null);
+    api('managers')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then((data) => setList(Array.isArray(data) ? data : []))
+      .catch(() => { setList([]); setError('Не удалось загрузить список'); })
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const create = (e: React.FormEvent) => {
@@ -131,10 +139,12 @@ function ManagersSection() {
     api(`managers/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
   };
 
+  const safeList = Array.isArray(list) ? list : [];
   return (
     <section className="card">
       <h2>Менеджеры</h2>
       <p className="subtitle">Ротация при эскалации</p>
+      {error && <p className="error-msg">{error}</p>}
       {loading ? <p className="subtitle">Загрузка…</p> : (
         <>
           <div className="table-wrap">
@@ -149,7 +159,7 @@ function ManagersSection() {
                 </tr>
               </thead>
               <tbody>
-                {list.map((m) => (
+                {safeList.map((m) => (
                   <tr key={m.id}>
                     <td>{String(m.amoUserId)}</td>
                     <td>{m.name}</td>
@@ -197,9 +207,17 @@ function ManagersSection() {
 function StopListSection() {
   const [list, setList] = useState<StopListEntry[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [phone, setPhone] = useState('');
   const [reason, setReason] = useState('');
-  const load = () => api('stop-list').then((r) => r.json()).then(setList).finally(() => setLoading(false));
+  const load = () => {
+    setError(null);
+    api('stop-list')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then((data) => setList(Array.isArray(data) ? data : []))
+      .catch(() => { setList([]); setError('Не удалось загрузить стоп-лист'); })
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const add = (e: React.FormEvent) => {
@@ -219,10 +237,12 @@ function StopListSection() {
     api(`stop-list/${encodeURIComponent(p)}`, { method: 'DELETE' }).then((r) => r.ok && load());
   };
 
+  const safeList = Array.isArray(list) ? list : [];
   return (
     <section className="card">
       <h2>Стоп-лист</h2>
       <p className="subtitle">Номера, на которые не отправляем сообщения</p>
+      {error && <p className="error-msg">{error}</p>}
       {loading ? <p className="subtitle">Загрузка…</p> : (
         <>
           <form onSubmit={add} style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -242,7 +262,7 @@ function StopListSection() {
                 <tr><th>Телефон</th><th>Причина</th><th></th></tr>
               </thead>
               <tbody>
-                {list.map((e) => (
+                {safeList.map((e) => (
                   <tr key={e.id}>
                     <td>{e.phone}</td>
                     <td>{e.reason}</td>
@@ -263,8 +283,16 @@ function StopListSection() {
 function SessionsSection() {
   const [list, setList] = useState<LeadSession[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [handoffId, setHandoffId] = useState<string | null>(null);
-  const load = () => api('lead-sessions').then((r) => r.json()).then(setList).finally(() => setLoading(false));
+  const load = () => {
+    setError(null);
+    api('lead-sessions')
+      .then((r) => r.ok ? r.json() : Promise.reject(new Error(r.statusText)))
+      .then((data) => setList(Array.isArray(data) ? data : []))
+      .catch(() => { setList([]); setError('Не удалось загрузить сессии'); })
+      .finally(() => setLoading(false));
+  };
   useEffect(() => { load(); }, []);
 
   const handoff = (id: string) => {
@@ -274,10 +302,12 @@ function SessionsSection() {
       .finally(() => setHandoffId(null));
   };
 
+  const safeList = Array.isArray(list) ? list : [];
   return (
     <section className="card">
       <h2>Сессии лидов</h2>
       <p className="subtitle">Последние диалоги (до 50)</p>
+      {error && <p className="error-msg">{error}</p>}
       {loading ? <p className="subtitle">Загрузка…</p> : (
         <div className="table-wrap">
           <table>
@@ -290,7 +320,7 @@ function SessionsSection() {
               </tr>
             </thead>
             <tbody>
-              {list.map((s) => (
+              {safeList.map((s) => (
                 <tr key={s.id}>
                   <td>{s.phoneMasked || s.phone}</td>
                   <td><span className="badge badge-muted">{s.status}</span></td>

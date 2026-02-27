@@ -30,7 +30,7 @@ export class AdminEscalationController {
         handoffAt: true,
       },
     });
-    return sessions;
+    return sessions.map((s) => ({ ...s, amoDealId: String(s.amoDealId) }));
   }
 
   @Post(':id/handoff')
