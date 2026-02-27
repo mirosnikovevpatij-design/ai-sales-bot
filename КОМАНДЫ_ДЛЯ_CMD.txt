@@ -7,6 +7,12 @@ git add .
 git commit -m "Update"
 git push origin main
 
---- Скачать с GitHub ---
+--- Скачать с GitHub (к себе на компьютер) ---
 cd /d "C:\Users\eweti\OneDrive\Рабочий стол\AsistentBot"
 git pull origin main
+
+--- Обновить сервер (выполнять ПОСЛЕ того как залил на GitHub) ---
+Вариант А: двойной клик по 3_обновить_сервер.bat (в начале файла укажи USER и HOST сервера).
+Вариант Б: зайти на сервер по SSH и вставить в терминал:
+  cd /var/www/ai-sales-bot
+  ./deploy.sh
