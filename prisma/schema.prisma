@@ -12,24 +12,42 @@ model LeadSession {
   amoDealId              BigInt   @unique
   amoContactId           BigInt?
   phone                  String
+  phoneMasked            String?
   conversationId         String?
+  waAccountId            Int?
   status                 LeadSessionStatus
   clientLanguage         ClientLanguage?
   conversationStateJson  Json?
   assignedManagerId      Int?
   handoffReason          String?
   handoffAt              DateTime?
+  slaNotified            Boolean  @default(false)
+  slaNotifiedAt          DateTime?
+  slaSecondNotified      Boolean  @default(false)
   lastClientMessageAt    DateTime?
   lastBotMessageAt       DateTime?
   initMessageId          String?
   initSentAt             DateTime?
+  initStatus             MessageStatus?
+  zoomMeetingId          String?
+  zoomJoinUrl            String?
+  zoomScheduledAt       DateTime?
+  zoomReminder24hSent    Boolean  @default(false)
+  zoomReminder1hSent     Boolean  @default(false)
+  amoPipelineStatusId    BigInt?
   source                 String?
+  followupStopped        Boolean  @default(false)
   proposedSlots          Json?
   createdAt              DateTime @default(now())
   updatedAt              DateTime @updatedAt
 
-  messages   Message[]
-  initQueues InitQueue[]
+  messages          Message[]
+  initQueues        InitQueue[]
+  followups         Followup[]
+  offHoursQueues    OffHoursQueue[]
+  handoffAssignments HandoffAssignment[]
+  assignedManager   Manager?           @relation("AssignedManager", fields: [assignedManagerId], references: [id])
+  waAccount         WhatsAppAccount?   @relation(fields: [waAccountId], references: [id])
 }
 
 model Message {
@@ -52,18 +70,187 @@ model Message {
 }
 
 model InitQueue {
-  id            String          @id @default(uuid())
-  leadSessionId String
-  idempotencyKey String        @unique
-  runAfter      DateTime
-  attempts      Int            @default(0)
-  maxAttempts   Int            @default(3)
-  lastError     String?
-  status        QueueStatus
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id             String     @id @default(uuid())
+  leadSessionId  String
+  idempotencyKey String    @unique
+  runAfter       DateTime
+  attempts       Int       @default(0)
+  maxAttempts    Int       @default(3)
+  lastError      String?
+  status         QueueStatus
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   leadSession LeadSession @relation(fields: [leadSessionId], references: [id], onDelete: Cascade)
+}
+
+model Manager {
+  id                   Int      @id @default(autoincrement())
+  amoUserId            BigInt   @unique
+  name                 String
+  telegramId           BigInt?
+  whatsappPhone        String?
+  active               Boolean  @default(true)
+  excludeFromRotation  Boolean  @default(false)
+  weight               Int      @default(1)
+  currentRoundPosition Int      @default(0)
+  createdAt            DateTime @default(now())
+
+  handoffAssignments HandoffAssignment[]
+  assignedSessions   LeadSession[]       @relation("AssignedManager")
+}
+
+model HandoffAssignment {
+  id             String   @id @default(uuid())
+  leadSessionId  String
+  managerId      Int
+  assignedAt     DateTime @default(now())
+  reason         String?
+
+  leadSession LeadSession @relation(fields: [leadSessionId], references: [id], onDelete: Cascade)
+  manager     Manager     @relation(fields: [managerId], references: [id])
+}
+
+model StopList {
+  id             Int       @id @default(autoincrement())
+  phone          String    @unique
+  reason         String
+  addedBy        StopListAddedBy
+  leadSessionId  String?
+  createdAt      DateTime  @default(now())
+}
+
+enum StopListAddedBy {
+  client_request
+  admin
+  system
+}
+
+model WhatsAppAccount {
+  id                 Int      @id @default(autoincrement())
+  connectionId       String?
+  phone              String
+  channelId          String?
+  status             WhatsAppAccountStatus @default(ACTIVE)
+  isPrimary          Boolean  @default(false)
+  rotationWeight     Int      @default(1)
+  messagesSentToday  Int      @default(0)
+  lastUsedAt         DateTime?
+  bannedAt           DateTime?
+  notes              String?
+  createdAt          DateTime @default(now())
+
+  leadSessions LeadSession[]
+}
+
+enum WhatsAppAccountStatus {
+  ACTIVE
+  DISCONNECTED
+  BANNED
+  QR_REQUIRED
+}
+
+model Followup {
+  id              String        @id @default(uuid())
+  leadSessionId   String
+  step            Int
+  templateVariant String?
+  dueAt           DateTime
+  sentAt          DateTime?
+  messageId       String?
+  status          FollowupStatus
+  cancelReason    String?
+  createdAt       DateTime      @default(now())
+
+  leadSession LeadSession @relation(fields: [leadSessionId], references: [id], onDelete: Cascade)
+}
+
+enum FollowupStatus {
+  SCHEDULED
+  SENT
+  CANCELLED
+  FAILED
+}
+
+model OffHoursQueue {
+  id               String   @id @default(uuid())
+  leadSessionId    String
+  messageId        String
+  receivedAt       DateTime @default(now())
+  scheduledReplyAt DateTime
+  status           OffHoursQueueStatus @default(PENDING)
+  processedAt      DateTime?
+
+  leadSession LeadSession @relation(fields: [leadSessionId], references: [id], onDelete: Cascade)
+}
+
+enum OffHoursQueueStatus {
+  PENDING
+  PROCESSED
+  CANCELLED
+}
+
+model SystemConfig {
+  key         String   @id
+  value       Json
+  description String?
+  category    String?
+  updatedBy   String?
+  updatedAt   DateTime @updatedAt
+}
+
+model Prompt {
+  id              Int      @id @default(autoincrement())
+  key             String   @unique
+  version         Int      @default(1)
+  isActive        Boolean  @default(true)
+  isAbTest        Boolean  @default(false)
+  abTrafficPercent Int?
+  content         String
+  variablesDesc   Json?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+}
+
+model KnowledgeDocument {
+  id               String    @id @default(uuid())
+  filename         String
+  fileType         KnowledgeFileType
+  storagePath      String
+  indexingStatus   KnowledgeIndexingStatus @default(PENDING)
+  fragmentCount    Int       @default(0)
+  errorMessage     String?
+  uploadedBy       String?
+  uploadedAt       DateTime  @default(now())
+  indexedAt        DateTime?
+
+  fragments KnowledgeFragment[]
+}
+
+model KnowledgeFragment {
+  id             String    @id @default(uuid())
+  documentId     String
+  content        String
+  topic          String?
+  audienceLevel  String?   // BRIEF | DETAILED | INTERNAL
+  language       String?
+  manuallyEdited Boolean   @default(false)
+  sourceFile     String?
+  updatedAt      DateTime  @updatedAt
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+}
+
+enum KnowledgeFileType {
+  docx
+  md
+}
+
+enum KnowledgeIndexingStatus {
+  PENDING
+  INDEXED
+  FAILED
+  OUTDATED
 }
 
 enum LeadSessionStatus {

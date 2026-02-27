@@ -2,6 +2,8 @@
 
 Все изменения ведём в Git и пушим в GitHub — у заказчика будет полная история коммитов.
 
+**Файлы на своём компьютере** — клонируй репо: `git clone https://github.com/mirosnikovevpatij-design/ai-sales-bot.git` (подробнее и автодеплой при пуше на сервер — в **[ПУШ_С_GITHUB_НА_СЕРВЕР.md](ПУШ_С_GITHUB_НА_СЕРВЕР.md)**).
+
 ## Что уже сделано в проекте
 
 - Файл **.gitignore** — в репозиторий не попадут `node_modules`, `.env` (ключи), `dist`, служебные папки. В репо будут только исходники и конфиги без секретов.
@@ -32,11 +34,11 @@ git status
 ```powershell
 git commit -m "Initial: NestJS + Prisma, лиды, очередь, диалог, админка, ключи в .env.example"
 git branch -M main
-git remote add origin https://github.com/ВАШ_ЛОГИН/ai-sales-bot.git
+git remote add origin https://github.com/mirosnikovevpatij-design/ai-sales-bot.git
 git push -u origin main
 ```
 
-Подставь вместо `ВАШ_ЛОГИН/ai-sales-bot` свой URL репозитория. GitHub может попросить логин/пароль или токен — введи их.
+Репозиторий: https://github.com/mirosnikovevpatij-design/ai-sales-bot GitHub может попросить логин/пароль или токен — введи их.
 
 ## Дальше (каждый раз после изменений)
 

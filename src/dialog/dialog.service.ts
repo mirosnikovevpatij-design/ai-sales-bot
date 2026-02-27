@@ -1,10 +1,14 @@
 import { Injectable } from '@nestjs/common';
 import { LeadSessionStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
+import { LlmService } from '../llm/llm.service';
 
 @Injectable()
 export class DialogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly llm: LlmService,
+  ) {}
 
   async handleIncomingMessage(leadSessionId: string, text: string): Promise<string> {
     const session = await this.prisma.leadSession.findUnique({
@@ -36,7 +40,26 @@ export class DialogService {
       },
     });
 
-    const reply = this.buildReply(nextStatus);
+    let reply: string;
+    if (this.llm.isConfigured) {
+      const lastMessages = await this.prisma.message.findMany({
+        where: { leadSessionId },
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+      });
+      const userMessages = lastMessages
+        .filter((m) => m.text)
+        .reverse()
+        .map((m) => ({
+          role: m.direction === 'IN' ? ('user' as const) : ('assistant' as const),
+          content: m.text!,
+        }));
+      const systemPrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${nextStatus}.`;
+      const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
+      reply = llmReply && llmReply.length > 0 ? llmReply : this.buildReply(nextStatus);
+    } else {
+      reply = this.buildReply(nextStatus);
+    }
 
     await this.prisma.message.create({
       data: {

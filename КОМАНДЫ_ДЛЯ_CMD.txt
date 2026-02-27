@@ -1,0 +1,12 @@
+Если удобнее через CMD: открой cmd, вставь по очереди (каждую строку — Enter).
+Первый раз может спросить логин/пароль GitHub (или токен вместо пароля).
+
+--- Залить на GitHub ---
+cd /d "C:\Users\eweti\OneDrive\Рабочий стол\AsistentBot"
+git add .
+git commit -m "Update"
+git push origin main
+
+--- Скачать с GitHub ---
+cd /d "C:\Users\eweti\OneDrive\Рабочий стол\AsistentBot"
+git pull origin main
