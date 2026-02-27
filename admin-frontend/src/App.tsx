@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './index.css';
 import { ErrorBoundary } from './ErrorBoundary';
 
-type Tab = 'config' | 'managers' | 'stoplist' | 'sessions';
+type Tab = 'config' | 'managers' | 'stoplist' | 'sessions' | 'test';
 
 type SystemConfig = {
   rateLimitPerMinute: number;
@@ -68,6 +68,7 @@ export const App: React.FC = () => {
           <button className={tab === 'managers' ? 'active' : ''} onClick={() => setTab('managers')}>Менеджеры</button>
           <button className={tab === 'stoplist' ? 'active' : ''} onClick={() => setTab('stoplist')}>Стоп-лист</button>
           <button className={tab === 'sessions' ? 'active' : ''} onClick={() => setTab('sessions')}>Сессии</button>
+          <button className={tab === 'test' ? 'active' : ''} onClick={() => setTab('test')}>Тестирование бота</button>
         </nav>
 
         <div className="tab-content" style={{ minHeight: 200 }}>
@@ -75,6 +76,7 @@ export const App: React.FC = () => {
           {tab === 'managers' && <ErrorBoundary><ManagersSection /></ErrorBoundary>}
           {tab === 'stoplist' && <ErrorBoundary><StopListSection /></ErrorBoundary>}
           {tab === 'sessions' && <ErrorBoundary><SessionsSection /></ErrorBoundary>}
+          {tab === 'test' && <ErrorBoundary><TestSection /></ErrorBoundary>}
         </div>
       </main>
     </div>
@@ -367,6 +369,125 @@ function SessionsSection() {
               ))}
             </tbody>
           </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+type ChatMessage = { role: 'bot' | 'user'; text: string };
+
+function TestSection() {
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const startScenario = () => {
+    setError(null);
+    setLoading(true);
+    api('test/start', { method: 'POST' })
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((data: { sessionId: string; initMessage: string }) => {
+        setSessionId(data.sessionId);
+        setMessages([{ role: 'bot', text: data.initMessage }]);
+      })
+      .catch(() => setError('Не удалось запустить сценарий'))
+      .finally(() => setLoading(false));
+  };
+
+  const endScenario = () => {
+    if (!sessionId) return;
+    setLoading(true);
+    api(`test/${sessionId}/end`, { method: 'POST' })
+      .then(() => {
+        setSessionId(null);
+        setMessages([]);
+        setError(null);
+      })
+      .finally(() => setLoading(false));
+  };
+
+  const sendMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const text = input.trim();
+    if (!sessionId || !text || loading) return;
+    setError(null);
+    setMessages((prev) => [...prev, { role: 'user', text }]);
+    setInput('');
+    setLoading(true);
+    api(`test/${sessionId}/send`, {
+      method: 'POST',
+      body: JSON.stringify({ text }),
+    })
+      .then((r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        return r.json();
+      })
+      .then((data: { reply: string }) => {
+        setMessages((prev) => [...prev, { role: 'bot', text: data.reply }]);
+      })
+      .catch(() => setError('Ошибка ответа бота'))
+      .finally(() => setLoading(false));
+  };
+
+  return (
+    <section className="card">
+      <h2>Тестирование бота</h2>
+      <p className="subtitle">Переписка с ботом (DeepSeek) как в WhatsApp — проверка сценария</p>
+      {error && <p className="error-msg">{error}</p>}
+      <div className="test-actions">
+        <button
+          type="button"
+          className="btn btn-primary"
+          disabled={loading || !!sessionId}
+          onClick={startScenario}
+        >
+          Запустить сценарий
+        </button>
+        {sessionId && (
+          <button
+            type="button"
+            className="btn btn-ghost"
+            disabled={loading}
+            onClick={endScenario}
+          >
+            Завершить сценарий
+          </button>
+        )}
+      </div>
+      {!sessionId && messages.length === 0 && (
+        <p className="subtitle" style={{ marginTop: 12 }}>
+          Нажмите «Запустить сценарий» — бот отправит первое сообщение. Отвечайте в поле ниже. Чтобы начать заново — «Завершить сценарий», затем снова «Запустить сценарий».
+        </p>
+      )}
+      {messages.length > 0 && (
+        <div className="chat-area">
+          <div className="chat-messages">
+            {messages.map((msg, i) => (
+              <div key={i} className={`chat-msg chat-msg--${msg.role}`}>
+                <span className="chat-msg-label">{msg.role === 'bot' ? 'Бот' : 'Вы'}</span>
+                <span className="chat-msg-text">{msg.text}</span>
+              </div>
+            ))}
+          </div>
+          <form onSubmit={sendMessage} className="chat-form">
+            <input
+              type="text"
+              className="chat-input"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="Введите ответ..."
+              disabled={!sessionId || loading}
+            />
+            <button type="submit" className="btn btn-primary" disabled={!sessionId || loading || !input.trim()}>
+              Отправить
+            </button>
+          </form>
         </div>
       )}
     </section>
