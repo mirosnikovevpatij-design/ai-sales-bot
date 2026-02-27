@@ -1,48 +1,19 @@
 import { Body, Controller, HttpException, Param, Post } from '@nestjs/common';
-import { PrismaService } from '../../database/prisma.service';
 import { DialogService } from '../../dialog/dialog.service';
-import { LeadSessionStatus } from '@prisma/client';
+import { randomUUID } from 'crypto';
 
-const TEST_INIT_MESSAGE =
-  'Здравствуйте! Это тестовое init-сообщение от бота. Напишите что-нибудь в ответ.';
-
+/** Тестовый чат не создаёт и не изменяет записи в БД лидов/сообщений — только проверка диалога с ботом. */
 @Controller('admin/test')
 export class AdminTestController {
-  constructor(
-    private readonly prisma: PrismaService,
-    private readonly dialog: DialogService,
-  ) {}
+  constructor(private readonly dialog: DialogService) {}
 
   @Post('scenario/start')
   async start() {
     try {
-      const amoDealId = BigInt(999000000 + (Date.now() % 10000000));
-      const phone = '+79000000000';
-      const session = await this.prisma.leadSession.create({
-        data: {
-          amoDealId,
-          phone,
-          status: LeadSessionStatus.INIT_SENT,
-          initSentAt: new Date(),
-        },
-      });
-    await this.prisma.message.create({
-      data: {
-        leadSessionId: session.id,
-        direction: 'OUT',
-        channel: 'WHATSAPP',
-        messageType: 'text',
-        text: TEST_INIT_MESSAGE,
-        status: 'SENT',
-      },
-    });
-    await this.prisma.leadSession.update({
-      where: { id: session.id },
-      data: { lastBotMessageAt: new Date() },
-    });
+      const initMessage = this.dialog.getTestInitialMessage();
       return {
-        sessionId: session.id,
-        initMessage: TEST_INIT_MESSAGE,
+        sessionId: randomUUID(),
+        initMessage,
       };
     } catch (err: any) {
       const message = err?.message || String(err);
@@ -55,20 +26,17 @@ export class AdminTestController {
 
   @Post(':sessionId/send')
   async send(
-    @Param('sessionId') sessionId: string,
-    @Body() body: { text?: string },
+    @Param('sessionId') _sessionId: string,
+    @Body() body: { text?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
   ) {
     const text = (body?.text ?? '').trim() || '(пусто)';
-    const reply = await this.dialog.handleIncomingMessage(sessionId, text);
+    const history = Array.isArray(body?.history) ? body.history : [];
+    const reply = await this.dialog.generateReplyForTest(history, text);
     return { reply };
   }
 
   @Post(':sessionId/end')
-  async end(@Param('sessionId') sessionId: string) {
-    await this.prisma.leadSession.update({
-      where: { id: sessionId },
-      data: { status: LeadSessionStatus.CLOSED },
-    });
+  async end(@Param('sessionId') _sessionId: string) {
     return { ok: true };
   }
 }

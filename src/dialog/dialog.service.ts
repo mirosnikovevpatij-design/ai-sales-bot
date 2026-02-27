@@ -116,5 +116,40 @@ export class DialogService {
         return 'Спасибо за сообщение! Это тестовый ответ бота.';
     }
   }
+
+  /** Начальное сообщение для тестового чата (без записи в БД). */
+  getTestInitialMessage(): string {
+    return this.buildReply(LeadSessionStatus.ENGAGED);
+  }
+
+  /**
+   * Ответ бота по истории переписки — только LLM/логика, без обращения к БД лидов/сообщений.
+   * Используется только в админском тестовом чате.
+   */
+  async generateReplyForTest(
+    history: Array<{ role: 'user' | 'assistant'; content: string }>,
+    newUserText: string,
+  ): Promise<string> {
+    const userMessages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user' as const, content: newUserText }];
+    const syntheticStatus = this.getTestSyntheticStatus(userMessages.length);
+    const systemPrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${syntheticStatus}.`;
+    if (this.llm.isConfigured) {
+      const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
+      if (llmReply && llmReply.length > 0) return llmReply;
+    }
+    return this.buildReply(syntheticStatus);
+  }
+
+  private getTestSyntheticStatus(messageCount: number): LeadSessionStatus {
+    const steps: LeadSessionStatus[] = [
+      LeadSessionStatus.ENGAGED,
+      LeadSessionStatus.QUALIFYING,
+      LeadSessionStatus.PRESENTING,
+      LeadSessionStatus.SCHEDULING_ZOOM,
+      LeadSessionStatus.ZOOM_BOOKED,
+    ];
+    const index = Math.min(Math.floor(messageCount / 2), steps.length - 1);
+    return steps[index];
+  }
 }
 

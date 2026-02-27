@@ -423,7 +423,13 @@ function TestSection() {
     setLoading(true);
     api(`test/${sessionId}/send`, {
       method: 'POST',
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({
+        text,
+        history: messages.map((m) => ({
+          role: m.role === 'bot' ? ('assistant' as const) : ('user' as const),
+          content: m.text,
+        })),
+      }),
     })
       .then((r) => {
         if (!r.ok) throw new Error(String(r.status));
