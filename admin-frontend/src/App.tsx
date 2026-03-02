@@ -135,53 +135,55 @@ function DashboardSection() {
   };
 
   return (
-    <section>
+    <section className="dashboard-section">
       <h2>Сводка</h2>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
-        <div className="card" style={{ minWidth: 120 }}>
-          <strong>Всего сессий</strong>
-          <div style={{ fontSize: '1.5rem' }}>{stats.totalSessions}</div>
+      <div className="dashboard-stat-cards">
+        <div className="dashboard-stat-card">
+          <span className="label">Всего сессий</span>
+          <span className="value">{stats.totalSessions}</span>
         </div>
-        <div className="card" style={{ minWidth: 120 }}>
-          <strong>Сообщений сегодня</strong>
-          <div style={{ fontSize: '1.5rem' }}>{stats.messagesToday}</div>
+        <div className="dashboard-stat-card">
+          <span className="label">Сообщений сегодня</span>
+          <span className="value">{stats.messagesToday}</span>
         </div>
-        <div className="card" style={{ minWidth: 120 }}>
-          <strong>Эскалаций</strong>
-          <div style={{ fontSize: '1.5rem' }}>{stats.handoffsCount}</div>
+        <div className="dashboard-stat-card">
+          <span className="label">Эскалаций</span>
+          <span className="value">{stats.handoffsCount}</span>
         </div>
-        <div className="card" style={{ minWidth: 120 }}>
-          <strong>Стоп-лист</strong>
-          <div style={{ fontSize: '1.5rem' }}>{stats.stopListCount}</div>
+        <div className="dashboard-stat-card">
+          <span className="label">Стоп-лист</span>
+          <span className="value">{stats.stopListCount}</span>
         </div>
-        <div className="card" style={{ minWidth: 120 }}>
-          <strong>Активных менеджеров</strong>
-          <div style={{ fontSize: '1.5rem' }}>{stats.managersCount}</div>
+        <div className="dashboard-stat-card">
+          <span className="label">Активных менеджеров</span>
+          <span className="value">{stats.managersCount}</span>
         </div>
-        <div className="card" style={{ minWidth: 120 }}>
-          <strong>В очереди off-hours</strong>
-          <div style={{ fontSize: '1.5rem' }}>{stats.pendingOffHours}</div>
+        <div className="dashboard-stat-card">
+          <span className="label">В очереди off-hours</span>
+          <span className="value">{stats.pendingOffHours}</span>
         </div>
       </div>
-      <h3>Сессии по статусам</h3>
-      <table className="table">
-        <thead>
-          <tr>
-            <th>Статус</th>
-            <th>Количество</th>
-          </tr>
-        </thead>
-        <tbody>
-          {Object.entries(sessionsByStatus)
-            .sort((a, b) => b[1] - a[1])
-            .map(([status, count]) => (
-              <tr key={status}>
-                <td>{statusLabels[status] ?? status}</td>
-                <td>{count}</td>
-              </tr>
-            ))}
-        </tbody>
-      </table>
+      <div className="dashboard-status-block">
+        <h3>Сессии по статусам</h3>
+        <table className="table">
+          <thead>
+            <tr>
+              <th>Статус</th>
+              <th>Количество</th>
+            </tr>
+          </thead>
+          <tbody>
+            {Object.entries(sessionsByStatus)
+              .sort((a, b) => b[1] - a[1])
+              .map(([status, count]) => (
+                <tr key={status}>
+                  <td>{statusLabels[status] ?? status}</td>
+                  <td>{count}</td>
+                </tr>
+              ))}
+          </tbody>
+        </table>
+      </div>
     </section>
   );
 }
