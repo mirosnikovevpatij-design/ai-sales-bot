@@ -9,6 +9,7 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
+import { DEFAULT_SYSTEM_PROMPT } from '../../dialog/dialog.service';
 import { PrismaService } from '../../database/prisma.service';
 
 const MAIN_PROMPT_KEY = 'dialog_system';
@@ -25,7 +26,7 @@ export class AdminPromptsController {
         where: { key: MAIN_PROMPT_KEY, isActive: true },
         orderBy: { version: 'desc' },
       });
-      return { content: row?.content?.trim() ?? '' };
+      return { content: row?.content?.trim() ?? DEFAULT_SYSTEM_PROMPT };
     } catch {
       return { content: '' };
     }
