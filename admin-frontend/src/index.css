@@ -428,7 +428,44 @@ tr:hover td {
   border-color: var(--accent);
 }
 
-/* Промпт — блок текста и поле редактирования */
+/* Промпт — шаги воронки и блок текста */
+.prompt-funnel-steps {
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.prompt-funnel-steps h3 {
+  margin: 0 0 0.75rem 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.prompt-funnel-steps ul {
+  margin: 0;
+  padding-left: 1.25rem;
+  list-style: decimal;
+}
+
+.prompt-funnel-steps li {
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  color: var(--text);
+}
+
+.prompt-funnel-steps li:last-child {
+  margin-bottom: 0;
+}
+
+.prompt-funnel-steps strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
 .prompt-display {
   white-space: pre-wrap;
   word-break: break-word;

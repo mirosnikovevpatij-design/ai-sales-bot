@@ -746,9 +746,27 @@ function PromptsSection() {
   if (loading) return <section className="card"><p>Загрузка…</p></section>;
   if (error && !content) return <section className="card"><p className="error-msg">{error}</p></section>;
 
+  const funnelSteps = [
+    { step: 'ENGAGED', label: 'Вовлечение', desc: 'Первый контакт с лидом, установление диалога.' },
+    { step: 'QUALIFYING', label: 'Квалификация', desc: 'Уточнение ниши, цели, объёма базы, географии.' },
+    { step: 'PRESENTING', label: 'Презентация', desc: 'Рассказ о продукте/услуге и выгодах.' },
+    { step: 'SCHEDULING_ZOOM', label: 'Приглашение на Zoom', desc: 'Предложение встречи в Zoom, выбор даты и времени.' },
+    { step: 'ZOOM_BOOKED', label: 'Zoom забронирован', desc: 'Встреча подтверждена, ожидание звонка.' },
+  ];
+
   return (
     <section className="card">
       <h2>Основной промпт бота</h2>
+      <div className="prompt-funnel-steps">
+        <h3>Шаги воронки до приглашения на Zoom и далее</h3>
+        <ul>
+          {funnelSteps.map(({ step, label, desc }) => (
+            <li key={step}>
+              <strong>{step}</strong> — {label}. {desc}
+            </li>
+          ))}
+        </ul>
+      </div>
       <p className="subtitle" style={{ marginBottom: '1rem' }}>Используется в диалоге и в тестовом чате. Переменная <code style={{ background: 'var(--border)', padding: '0.1rem 0.3rem', borderRadius: 4 }}>{'{{currentStep}}'}</code> подставится этапом воронки.</p>
       {error && <p className="error-msg">{error}</p>}
       {!editing ? (
