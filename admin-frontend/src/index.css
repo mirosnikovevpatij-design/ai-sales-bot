@@ -427,3 +427,32 @@ tr:hover td {
   outline: none;
   border-color: var(--accent);
 }
+
+/* Промпт — блок текста и поле редактирования */
+.prompt-display {
+  white-space: pre-wrap;
+  word-break: break-word;
+  padding: 1rem 1.25rem;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  min-height: 80px;
+}
+
+.prompt-edit-textarea {
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.prompt-edit-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}

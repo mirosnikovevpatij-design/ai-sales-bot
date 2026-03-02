@@ -11,9 +11,49 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
 
+const MAIN_PROMPT_KEY = 'dialog_system';
+
 @Controller('admin/prompts')
 export class AdminPromptsController {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** Текущий основной промпт бота (один блок, редактирование в админке). */
+  @Get('main')
+  async getMain() {
+    try {
+      const row = await this.prisma.prompt.findFirst({
+        where: { key: MAIN_PROMPT_KEY, isActive: true },
+        orderBy: { version: 'desc' },
+      });
+      return { content: row?.content?.trim() ?? '' };
+    } catch {
+      return { content: '' };
+    }
+  }
+
+  /** Сохранить основной промпт (новая версия, делается активной). */
+  @Put('main')
+  async putMain(@Body() body: { content?: string }) {
+    const content = typeof body?.content === 'string' ? body.content : '';
+    const latest = await this.prisma.prompt.findFirst({
+      where: { key: MAIN_PROMPT_KEY },
+      orderBy: { version: 'desc' },
+    });
+    const version = (latest?.version ?? 0) + 1;
+    const created = await this.prisma.prompt.create({
+      data: {
+        key: MAIN_PROMPT_KEY,
+        version,
+        content,
+        isActive: true,
+      },
+    });
+    await this.prisma.prompt.updateMany({
+      where: { key: MAIN_PROMPT_KEY, id: { not: created.id } },
+      data: { isActive: false },
+    });
+    return { content: created.content };
+  }
 
   @Get()
   async list() {
