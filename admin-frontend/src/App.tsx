@@ -577,6 +577,8 @@ function KnowledgeSection() {
   const [form, setForm] = useState({ filename: '', content: '' });
   const [testQuery, setTestQuery] = useState('');
   const [testResults, setTestResults] = useState<{ query: string; results: { content: string; score: number }[] } | null>(null);
+  const [viewDoc, setViewDoc] = useState<{ filename: string; content: string | null } | null>(null);
+  const [viewLoading, setViewLoading] = useState(false);
   const load = () => {
     setError(null);
     api('knowledge/documents')
@@ -610,6 +612,16 @@ function KnowledgeSection() {
     api(`knowledge/documents/${id}`, { method: 'DELETE' }).then((r) => r.ok && load());
   };
 
+  const viewDocument = (id: string) => {
+    setViewLoading(true);
+    setViewDoc(null);
+    api(`knowledge/documents/${id}`)
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((d: { filename: string; content?: string | null }) => setViewDoc({ filename: d.filename, content: d.content ?? null }))
+      .catch(() => setViewDoc({ filename: '', content: null }))
+      .finally(() => setViewLoading(false));
+  };
+
   const runTestRag = (e: React.FormEvent) => {
     e.preventDefault();
     const q = testQuery.trim() || 'тест';
@@ -637,6 +649,7 @@ function KnowledgeSection() {
                     <td>{d.fragmentCount ?? 0}</td>
                     <td>{formatDate(d.uploadedAt)}</td>
                     <td>
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => viewDocument(d.id)}>Просмотр</button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => reindex(d.id)}>Переиндексировать</button>
                       <button type="button" className="btn btn-ghost btn-sm btn-danger" style={{ marginLeft: '0.25rem' }} onClick={() => removeDoc(d.id)}>Удалить</button>
                     </td>
@@ -653,6 +666,20 @@ function KnowledgeSection() {
               <div className="form-row"><label>Текст (или вставка)</label><textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} placeholder="Текст для разбиения на фрагменты…" rows={6} style={{ width: '100%' }} /></div>
               <div className="form-actions"><button type="submit" className="btn btn-primary">Добавить и проиндексировать</button><button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)}>Отмена</button></div>
             </form>
+          )}
+          {viewLoading && <p className="subtitle">Загрузка документа…</p>}
+          {viewDoc !== null && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setViewDoc(null)}>
+              <div style={{ background: 'var(--bg)', borderRadius: 8, maxWidth: 720, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong>{viewDoc.filename || 'Документ'}</strong>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setViewDoc(null)}>Закрыть</button>
+                </div>
+                <div style={{ padding: '1rem 1.25rem', overflow: 'auto', flex: 1, whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                  {viewDoc.content ?? '(Текст не сохранён или пуст)'}
+                </div>
+              </div>
+            </div>
           )}
           <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
             <h3 style={{ marginBottom: '0.5rem', fontSize: '0.95rem' }}>Тест RAG</h3>
