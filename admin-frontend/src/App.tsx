@@ -718,19 +718,15 @@ const ALL_STEP_KEYS = ['ENGAGED', 'QUALIFYING', 'PRESENTING', 'SCHEDULING_ZOOM',
 
 function PromptsSection() {
   const [content, setContent] = useState<string>('');
-  const [initContent, setInitContent] = useState<string>('');
   const [funnelSteps, setFunnelSteps] = useState<FunnelStepRow[]>([]);
   const [allStepKeys] = useState<string[]>(ALL_STEP_KEYS);
-  const [rules, setRules] = useState({ refusals: '', negativity: '', outOfScope: '' });
+  const [rules, setRules] = useState({ refusals: '', negativity: '', outOfScope: '', custom: '' });
   const [rulesSaving, setRulesSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
-  const [initEditing, setInitEditing] = useState(false);
-  const [initEditText, setInitEditText] = useState('');
-  const [initSaving, setInitSaving] = useState(false);
   const [stepsEditing, setStepsEditing] = useState(false);
   const [stepsEdit, setStepsEdit] = useState<FunnelStepRow[]>([]);
   const [stepsSaving, setStepsSaving] = useState(false);
@@ -739,13 +735,11 @@ function PromptsSection() {
     setError(null);
     Promise.all([
       api('prompts/main').then((r) => (r.ok ? r.json() : Promise.reject())),
-      api('prompts/init-message').then((r) => (r.ok ? r.json() : Promise.reject())),
       api('prompts/funnel-steps').then((r) => (r.ok ? r.json() : Promise.reject())),
       api('prompts/rules').then((r) => (r.ok ? r.json() : Promise.reject())),
     ])
-      .then(([main, init, stepsData, rulesData]) => {
+      .then(([main, stepsData, rulesData]) => {
         setContent(typeof main?.content === 'string' ? main.content : '');
-        setInitContent(typeof init?.content === 'string' ? init.content : '');
         const steps = Array.isArray((stepsData as any)?.steps) ? (stepsData as any).steps : [];
         setFunnelSteps(steps.length ? steps.map((s: any) => ({
           step: s.step,
@@ -758,6 +752,7 @@ function PromptsSection() {
           refusals: typeof r?.refusals === 'string' ? r.refusals : '',
           negativity: typeof r?.negativity === 'string' ? r.negativity : '',
           outOfScope: typeof r?.outOfScope === 'string' ? r.outOfScope : '',
+          custom: typeof r?.custom === 'string' ? r.custom : '',
         });
       })
       .catch(() => setError('Не удалось загрузить'))
@@ -778,20 +773,6 @@ function PromptsSection() {
       .finally(() => setSaving(false));
   };
   const cancelEdit = () => { setEditing(false); setEditText(''); };
-
-  const startInitEdit = () => { setInitEditText(initContent); setInitEditing(true); };
-  const saveInit = () => {
-    setInitSaving(true);
-    api('prompts/init-message', { method: 'PUT', body: JSON.stringify({ content: initEditText }) })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data: { content?: string }) => {
-        setInitContent(typeof data?.content === 'string' ? data.content : initEditText);
-        setInitEditing(false);
-      })
-      .catch(() => setError('Не удалось сохранить приветственное сообщение'))
-      .finally(() => setInitSaving(false));
-  };
-  const cancelInitEdit = () => { setInitEditing(false); setInitEditText(''); };
 
   const startStepsEdit = () => { setStepsEdit(funnelSteps.map((s) => ({ ...s, phrases: s.phrases ? [...s.phrases] : [] }))); setStepsEditing(true); };
   const saveSteps = () => {
@@ -841,14 +822,14 @@ function PromptsSection() {
     api('prompts/rules', { method: 'PUT', body: JSON.stringify(rules) })
       .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data: any) => {
-        setRules({ refusals: data?.refusals ?? '', negativity: data?.negativity ?? '', outOfScope: data?.outOfScope ?? '' });
+        setRules({ refusals: data?.refusals ?? '', negativity: data?.negativity ?? '', outOfScope: data?.outOfScope ?? '', custom: data?.custom ?? '' });
       })
       .catch(() => setError('Не удалось сохранить правила'))
       .finally(() => setRulesSaving(false));
   };
 
   if (loading) return <section className="card"><p>Загрузка…</p></section>;
-  if (error && !content && !initContent && funnelSteps.length === 0) return <section className="card"><p className="error-msg">{error}</p></section>;
+  if (error && !content && funnelSteps.length === 0) return <section className="card"><p className="error-msg">{error}</p></section>;
 
   return (
     <section className="card">
@@ -877,42 +858,30 @@ function PromptsSection() {
         )}
       </div>
 
-      {/* Приветственное сообщение */}
-      <div className="prompt-block">
-        <h3 className="prompt-block-title">Приветственное сообщение</h3>
-        <p className="subtitle hint">Первое сообщение клиенту в WhatsApp после нажатия кнопки на автозвоне. Обычно это приветствие и подтверждение, что человек на связи.</p>
-        {!initEditing ? (
-          <>
-            <div className="prompt-display">{initContent || <span style={{ color: 'var(--text-muted)' }}>(не задано)</span>}</div>
-            <div className="form-actions" style={{ marginTop: '0.5rem' }}>
-              <button type="button" className="btn btn-primary" onClick={startInitEdit}>Редактировать</button>
-            </div>
-          </>
-        ) : (
-          <>
-            <textarea value={initEditText} onChange={(e) => setInitEditText(e.target.value)} rows={4} className="prompt-edit-textarea" placeholder="Текст приветствия…" />
-            <div className="form-actions" style={{ marginTop: '0.5rem' }}>
-              <button type="button" className="btn btn-primary" onClick={saveInit} disabled={initSaving}>{initSaving ? 'Сохранение…' : 'Сохранить'}</button>
-              <button type="button" className="btn btn-ghost" onClick={cancelInitEdit} disabled={initSaving}>Отмена</button>
-            </div>
-          </>
-        )}
-      </div>
-
-      {/* Блок 2: Воронка продаж */}
-      <div className="prompt-funnel-steps">
-        <h3 className="prompt-block-title">Воронка продаж</h3>
+      {/* Блок «Шаги» — всегда открыт, карточки видны */}
+      <div className="prompt-funnel-steps prompt-funnel-steps-open">
+        <h3 className="prompt-block-title">Шаги воронки</h3>
         <p className="subtitle hint">Здесь настраиваются этапы, по которым бот ведёт клиента. Можно менять порядок, удалять или добавлять этапы. Бот будет плавно переводить клиента от одного этапа к другому.</p>
         {!stepsEditing ? (
           <>
-            <ul>
+            <div className="funnel-steps-cards">
               {funnelSteps.map((s, i) => (
-                <li key={s.step}>
-                  <strong>{i + 1}. {s.label}</strong> — {s.description}
-                  {s.phrases?.length ? ` (фраз: ${s.phrases.length})` : ''}
-                </li>
+                <div key={s.step} className="funnel-step-card">
+                  <div className="funnel-step-card-header">
+                    <span className="funnel-step-num">Шаг {i + 1}</span>
+                    <strong>{s.label}</strong>
+                  </div>
+                  <p className="funnel-step-card-desc">{s.description}</p>
+                  {(s.phrases?.length ?? 0) > 0 && (
+                    <ul className="funnel-step-phrases-preview">
+                      {s.phrases!.map((p, j) => (
+                        <li key={j}>{p.fixed ? '🔒 ' : ''}{p.text || '(пусто)'}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
               ))}
-            </ul>
+            </div>
             <div className="form-actions" style={{ marginTop: '0.75rem' }}>
               <button type="button" className="btn btn-primary" onClick={startStepsEdit}>Редактировать воронку</button>
             </div>
@@ -1000,6 +969,11 @@ function PromptsSection() {
           <label>Вне компетенции</label>
           <p className="subtitle hint">Что делать, если бот не нашёл ответ в Базе знаний. Пример: «Скажи, что это уточнит менеджер»; «Не придумывай — попроси подождать».</p>
           <textarea value={rules.outOfScope} onChange={(e) => setRules((r) => ({ ...r, outOfScope: e.target.value }))} rows={3} className="prompt-edit-textarea" placeholder="Если нет ответа в базе знаний…" />
+        </div>
+        <div className="form-row">
+          <label>Свободное поле</label>
+          <p className="subtitle hint">Любые дополнительные правила или инструкции своими словами. Будет учтено вместе с остальными правилами.</p>
+          <textarea value={rules.custom} onChange={(e) => setRules((r) => ({ ...r, custom: e.target.value }))} rows={4} className="prompt-edit-textarea" placeholder="Дополнительные правила…" />
         </div>
         <div className="form-actions" style={{ marginTop: '0.5rem' }}>
           <button type="button" className="btn btn-primary" onClick={saveRules} disabled={rulesSaving}>{rulesSaving ? 'Сохранение…' : 'Сохранить правила'}</button>

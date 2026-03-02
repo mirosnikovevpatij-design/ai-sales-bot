@@ -167,7 +167,7 @@ export class DialogService {
     return null;
   }
 
-  private async getRules(): Promise<{ refusals: string; negativity: string; outOfScope: string }> {
+  private async getRules(): Promise<{ refusals: string; negativity: string; outOfScope: string; custom: string }> {
     try {
       const row = await this.prisma.systemConfig.findUnique({
         where: { key: 'prompt_rules' },
@@ -178,9 +178,10 @@ export class DialogService {
           refusals: typeof v.refusals === 'string' ? v.refusals : '',
           negativity: typeof v.negativity === 'string' ? v.negativity : '',
           outOfScope: typeof v.outOfScope === 'string' ? v.outOfScope : '',
+          custom: typeof v.custom === 'string' ? v.custom : '',
         };
     } catch {}
-    return { refusals: '', negativity: '', outOfScope: '' };
+    return { refusals: '', negativity: '', outOfScope: '', custom: '' };
   }
 
   private async getNextStatus(current: LeadSessionStatus): Promise<LeadSessionStatus> {
@@ -250,7 +251,7 @@ export class DialogService {
     stepConfig?: { label: string; description: string; phrases: { text: string; fixed: boolean }[] } | null,
   ): Promise<string> {
     const rules = await this.getRules();
-    const rulesBlock = [rules.refusals, rules.negativity, rules.outOfScope]
+    const rulesBlock = [rules.refusals, rules.negativity, rules.outOfScope, rules.custom]
       .filter(Boolean)
       .join('\n\n');
     const rulesSection = rulesBlock

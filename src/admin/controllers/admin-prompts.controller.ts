@@ -31,6 +31,7 @@ const DEFAULT_RULES = {
   refusals: '',
   negativity: '',
   outOfScope: '',
+  custom: '',
 };
 
 @Controller('admin/prompts')
@@ -196,6 +197,7 @@ export class AdminPromptsController {
           refusals: typeof v.refusals === 'string' ? v.refusals : DEFAULT_RULES.refusals,
           negativity: typeof v.negativity === 'string' ? v.negativity : DEFAULT_RULES.negativity,
           outOfScope: typeof v.outOfScope === 'string' ? v.outOfScope : DEFAULT_RULES.outOfScope,
+          custom: typeof v.custom === 'string' ? v.custom : DEFAULT_RULES.custom,
         };
       }
     } catch {}
@@ -204,17 +206,18 @@ export class AdminPromptsController {
 
   @Put('rules')
   async putRules(
-    @Body() body: { refusals?: string; negativity?: string; outOfScope?: string },
+    @Body() body: { refusals?: string; negativity?: string; outOfScope?: string; custom?: string },
   ) {
     const refusals = typeof body?.refusals === 'string' ? body.refusals.trim() : '';
     const negativity = typeof body?.negativity === 'string' ? body.negativity.trim() : '';
     const outOfScope = typeof body?.outOfScope === 'string' ? body.outOfScope.trim() : '';
+    const custom = typeof body?.custom === 'string' ? body.custom.trim() : '';
     await this.prisma.systemConfig.upsert({
       where: { key: PROMPT_RULES_CONFIG_KEY },
-      create: { key: PROMPT_RULES_CONFIG_KEY, value: { refusals, negativity, outOfScope } as any },
-      update: { value: { refusals, negativity, outOfScope } as any },
+      create: { key: PROMPT_RULES_CONFIG_KEY, value: { refusals, negativity, outOfScope, custom } as any },
+      update: { value: { refusals, negativity, outOfScope, custom } as any },
     });
-    return { refusals, negativity, outOfScope };
+    return { refusals, negativity, outOfScope, custom };
   }
 
   @Get()
