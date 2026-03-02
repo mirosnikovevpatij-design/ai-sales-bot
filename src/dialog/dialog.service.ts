@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { LeadSessionStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
+import { RagService } from '../rag/rag.service';
 
 /** Состояние диалога для квалификации (ТЗ: ниша, цель, объём, география). */
 export interface ConversationState {
@@ -18,6 +19,7 @@ export class DialogService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly llm: LlmService,
+    private readonly rag: RagService,
   ) {}
 
   async handleIncomingMessage(
@@ -78,7 +80,8 @@ export class DialogService {
           role: m.direction === 'IN' ? ('user' as const) : ('assistant' as const),
           content: m.text!,
         }));
-      const systemPrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${nextStatus}.`;
+      const basePrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${nextStatus}.`;
+      const systemPrompt = await this.buildSystemPromptWithRag(basePrompt, text);
       const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
       reply = llmReply && llmReply.length > 0 ? llmReply : this.buildReply(nextStatus);
     } else {
@@ -154,12 +157,24 @@ export class DialogService {
   ): Promise<string> {
     const userMessages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user' as const, content: newUserText }];
     const syntheticStatus = this.getTestSyntheticStatus(userMessages.length);
-    const systemPrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${syntheticStatus}.`;
+    const basePrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${syntheticStatus}.`;
+    const systemPrompt = await this.buildSystemPromptWithRag(basePrompt, newUserText);
     if (this.llm.isConfigured) {
       const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
       if (llmReply && llmReply.length > 0) return llmReply;
     }
     return this.buildReply(syntheticStatus);
+  }
+
+  /** Добавляет к системному промпту релевантные фрагменты из базы знаний (инструкции для бота). */
+  private async buildSystemPromptWithRag(basePrompt: string, userQuery: string): Promise<string> {
+    const query = (userQuery || 'общение с клиентом').trim().slice(0, 200);
+    const results = await this.rag.search(query, 8);
+    if (!results.length) return basePrompt;
+    const chunks = results.map((r) => r.content.trim()).filter(Boolean);
+    if (!chunks.length) return basePrompt;
+    const knowledgeBlock = chunks.join('\n\n');
+    return `${basePrompt}\n\n---\nИнструкция из базы знаний (соблюдай при ответе):\n${knowledgeBlock}`;
   }
 
   private getTestSyntheticStatus(messageCount: number): LeadSessionStatus {
