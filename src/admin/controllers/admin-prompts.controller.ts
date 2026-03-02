@@ -9,6 +9,7 @@ import {
   Post,
   Put,
 } from '@nestjs/common';
+import { DEFAULT_INIT_MESSAGE, INIT_MESSAGE_KEY } from '../../constants/prompt-defaults';
 import { DEFAULT_SYSTEM_PROMPT } from '../../dialog/dialog.service';
 import { PrismaService } from '../../database/prisma.service';
 
@@ -51,6 +52,44 @@ export class AdminPromptsController {
     });
     await this.prisma.prompt.updateMany({
       where: { key: MAIN_PROMPT_KEY, id: { not: created.id } },
+      data: { isActive: false },
+    });
+    return { content: created.content };
+  }
+
+  /** Текущее приветственное сообщение (отправляется лиду после нажатия кнопки на автозвоне). */
+  @Get('init-message')
+  async getInitMessage() {
+    try {
+      const row = await this.prisma.prompt.findFirst({
+        where: { key: INIT_MESSAGE_KEY, isActive: true },
+        orderBy: { version: 'desc' },
+      });
+      return { content: row?.content?.trim() ?? DEFAULT_INIT_MESSAGE };
+    } catch {
+      return { content: DEFAULT_INIT_MESSAGE };
+    }
+  }
+
+  /** Сохранить приветственное сообщение. */
+  @Put('init-message')
+  async putInitMessage(@Body() body: { content?: string }) {
+    const content = typeof body?.content === 'string' ? body.content : '';
+    const latest = await this.prisma.prompt.findFirst({
+      where: { key: INIT_MESSAGE_KEY },
+      orderBy: { version: 'desc' },
+    });
+    const version = (latest?.version ?? 0) + 1;
+    const created = await this.prisma.prompt.create({
+      data: {
+        key: INIT_MESSAGE_KEY,
+        version,
+        content: content || DEFAULT_INIT_MESSAGE,
+        isActive: true,
+      },
+    });
+    await this.prisma.prompt.updateMany({
+      where: { key: INIT_MESSAGE_KEY, id: { not: created.id } },
       data: { isActive: false },
     });
     return { content: created.content };

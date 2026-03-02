@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { DEFAULT_INIT_MESSAGE, INIT_MESSAGE_KEY } from '../constants/prompt-defaults';
 import { PrismaService } from '../database/prisma.service';
 import { DialogService } from '../dialog/dialog.service';
 import { AmoChatsService } from '../integrations/amo-chats.service';
@@ -25,8 +26,11 @@ export class MessagingService {
     });
     if (!session) return;
 
-    const text =
-      'Здравствуйте! Это тестовое init-сообщение от бота. Напишите что-нибудь в ответ.';
+    const row = await this.prisma.prompt.findFirst({
+      where: { key: INIT_MESSAGE_KEY, isActive: true },
+      orderBy: { version: 'desc' },
+    });
+    const text = (row?.content?.trim() || DEFAULT_INIT_MESSAGE) as string;
 
     let conversationId = session.conversationId;
     let externalMessageId: string | null = null;

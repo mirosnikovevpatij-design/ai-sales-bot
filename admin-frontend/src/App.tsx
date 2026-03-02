@@ -705,27 +705,32 @@ function KnowledgeSection() {
 
 function PromptsSection() {
   const [content, setContent] = useState<string>('');
+  const [initContent, setInitContent] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState('');
   const [saving, setSaving] = useState(false);
+  const [initEditing, setInitEditing] = useState(false);
+  const [initEditText, setInitEditText] = useState('');
+  const [initSaving, setInitSaving] = useState(false);
 
   const load = () => {
     setError(null);
-    api('prompts/main')
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data: { content?: string }) => setContent(typeof data?.content === 'string' ? data.content : ''))
-      .catch(() => setError('Не удалось загрузить промпт'))
+    Promise.all([
+      api('prompts/main').then((r) => (r.ok ? r.json() : Promise.reject())),
+      api('prompts/init-message').then((r) => (r.ok ? r.json() : Promise.reject())),
+    ])
+      .then(([main, init]) => {
+        setContent(typeof main?.content === 'string' ? main.content : '');
+        setInitContent(typeof init?.content === 'string' ? init.content : '');
+      })
+      .catch(() => setError('Не удалось загрузить'))
       .finally(() => setLoading(false));
   };
   useEffect(() => { load(); }, []);
 
-  const startEdit = () => {
-    setEditText(content);
-    setEditing(true);
-  };
-
+  const startEdit = () => { setEditText(content); setEditing(true); };
   const save = () => {
     setSaving(true);
     api('prompts/main', { method: 'PUT', body: JSON.stringify({ content: editText }) })
@@ -737,14 +742,24 @@ function PromptsSection() {
       .catch(() => setError('Не удалось сохранить'))
       .finally(() => setSaving(false));
   };
+  const cancelEdit = () => { setEditing(false); setEditText(''); };
 
-  const cancelEdit = () => {
-    setEditing(false);
-    setEditText('');
+  const startInitEdit = () => { setInitEditText(initContent); setInitEditing(true); };
+  const saveInit = () => {
+    setInitSaving(true);
+    api('prompts/init-message', { method: 'PUT', body: JSON.stringify({ content: initEditText }) })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { content?: string }) => {
+        setInitContent(typeof data?.content === 'string' ? data.content : initEditText);
+        setInitEditing(false);
+      })
+      .catch(() => setError('Не удалось сохранить приветственное сообщение'))
+      .finally(() => setInitSaving(false));
   };
+  const cancelInitEdit = () => { setInitEditing(false); setInitEditText(''); };
 
   if (loading) return <section className="card"><p>Загрузка…</p></section>;
-  if (error && !content) return <section className="card"><p className="error-msg">{error}</p></section>;
+  if (error && !content && !initContent) return <section className="card"><p className="error-msg">{error}</p></section>;
 
   const funnelSteps = [
     { step: 'ENGAGED', label: 'Вовлечение', desc: 'Первый контакт с лидом, установление диалога.' },
@@ -756,7 +771,27 @@ function PromptsSection() {
 
   return (
     <section className="card">
-      <h2>Основной промпт бота</h2>
+      <h2>Промпты и приветствие</h2>
+
+      <h3 className="prompt-block-title">Приветственное сообщение</h3>
+      <p className="subtitle" style={{ marginBottom: '0.5rem' }}>Отправляется лиду в WhatsApp после того, как он нажал нужную кнопку на автозвоне (например, цифру 1).</p>
+      {!initEditing ? (
+        <>
+          <div className="prompt-display">{initContent || <span style={{ color: 'var(--text-muted)' }}>(не задано)</span>}</div>
+          <div className="form-actions" style={{ marginTop: '0.5rem', marginBottom: '1.25rem' }}>
+            <button type="button" className="btn btn-primary" onClick={startInitEdit}>Редактировать</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <textarea value={initEditText} onChange={(e) => setInitEditText(e.target.value)} rows={4} className="prompt-edit-textarea" placeholder="Текст приветствия…" />
+          <div className="form-actions" style={{ marginTop: '0.5rem', marginBottom: '1.25rem' }}>
+            <button type="button" className="btn btn-primary" onClick={saveInit} disabled={initSaving}>{initSaving ? 'Сохранение…' : 'Сохранить'}</button>
+            <button type="button" className="btn btn-ghost" onClick={cancelInitEdit} disabled={initSaving}>Отмена</button>
+          </div>
+        </>
+      )}
+
       <div className="prompt-funnel-steps">
         <h3>Шаги воронки до приглашения на Zoom и далее</h3>
         <ul>
@@ -767,6 +802,7 @@ function PromptsSection() {
           ))}
         </ul>
       </div>
+      <h3 className="prompt-block-title">Основной промпт бота</h3>
       <p className="subtitle" style={{ marginBottom: '1rem' }}>Используется в диалоге и в тестовом чате. Переменная <code style={{ background: 'var(--border)', padding: '0.1rem 0.3rem', borderRadius: 4 }}>{'{{currentStep}}'}</code> подставится этапом воронки.</p>
       {error && <p className="error-msg">{error}</p>}
       {!editing ? (

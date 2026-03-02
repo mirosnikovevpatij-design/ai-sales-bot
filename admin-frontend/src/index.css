@@ -437,7 +437,8 @@ tr:hover td {
   border-radius: var(--radius);
 }
 
-.prompt-funnel-steps h3 {
+.prompt-funnel-steps h3,
+.prompt-block-title {
   margin: 0 0 0.75rem 0;
   font-size: 0.95rem;
   font-weight: 600;
