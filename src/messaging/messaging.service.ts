@@ -3,6 +3,7 @@ import { PrismaService } from '../database/prisma.service';
 import { DialogService } from '../dialog/dialog.service';
 import { AmoChatsService } from '../integrations/amo-chats.service';
 import { FollowupService } from '../followup/followup.service';
+import { AppConfigService } from '../config/config.service';
 
 @Injectable()
 export class MessagingService {
@@ -13,6 +14,7 @@ export class MessagingService {
     private readonly dialogService: DialogService,
     private readonly amoChats: AmoChatsService,
     private readonly followupService: FollowupService,
+    private readonly appConfig: AppConfigService,
   ) {}
 
   async sendInitMessage(sessionId: string) {
@@ -76,8 +78,7 @@ export class MessagingService {
       },
     });
 
-    const dueAt = new Date();
-    dueAt.setHours(dueAt.getHours() + 24);
+    const dueAt = this.followupService.getFollowupDueAt(1);
     await this.followupService.scheduleFollowup(sessionId, 1, dueAt);
   }
 
@@ -112,7 +113,69 @@ export class MessagingService {
 
     await this.followupService.cancelForSession(sessionId, 'client_replied');
 
-    return this.dialogService.handleIncomingMessage(sessionId, text || '(пусто)');
+    const content = (text || '').trim() || '(пусто)';
+
+    if (this.isClientStopPhrase(content)) {
+      await this.prisma.message.create({
+        data: {
+          leadSessionId: sessionId,
+          direction: 'IN',
+          channel: 'WHATSAPP',
+          messageType: 'text',
+          text: content,
+          status: 'DELIVERED',
+        },
+      });
+      await this.prisma.leadSession.update({
+        where: { id: sessionId },
+        data: { status: 'CLOSED', followupStopped: true, lastClientMessageAt: new Date() },
+      });
+      return 'Вы отписаны. Мы больше не будем писать.';
+    }
+
+    if (!this.appConfig.isWithinWorkingHours()) {
+      const msg = await this.prisma.message.create({
+        data: {
+          leadSessionId: sessionId,
+          direction: 'IN',
+          channel: 'WHATSAPP',
+          messageType: 'text',
+          text: content,
+          status: 'DELIVERED',
+        },
+      });
+      const scheduledReplyAt = this.appConfig.getNextWorkingWindowStart();
+      await this.prisma.offHoursQueue.create({
+        data: {
+          leadSessionId: sessionId,
+          messageId: msg.id,
+          scheduledReplyAt,
+          status: 'PENDING',
+        },
+      });
+      return 'Мы ответим в рабочее время (пн–сб 9:00–21:00).';
+    }
+
+    return this.dialogService.handleIncomingMessage(sessionId, content);
+  }
+
+  /** Стоп-слова/фразы клиента: отписка, удаление данных (ТЗ). */
+  private isClientStopPhrase(text: string): boolean {
+    const normalized = text.toLowerCase().replace(/\s+/g, ' ').trim();
+    const stopPhrases = [
+      'стоп',
+      'отпишитесь',
+      'отписаться',
+      'удалите данные',
+      'удалите мои данные',
+      'удалите меня',
+      'не пишите',
+      'хватит',
+      'прекратите',
+      'отказ',
+      'не интересно',
+    ];
+    return stopPhrases.some((phrase) => normalized === phrase || normalized.includes(phrase));
   }
 }
 

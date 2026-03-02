@@ -36,4 +36,54 @@ export class AppConfigService {
     const workDays = this.workDays;
     return workDays.includes(day === 0 ? 7 : day);
   }
+
+  /** Ближайший момент начала рабочего окна (для отложенной отправки init / off-hours). */
+  getNextWorkingWindowStart(from: Date = new Date()): Date {
+    const d = new Date(from);
+    const [startH, startM] = this.sendWindowStart.split(':').map(Number);
+    const currentMin = d.getHours() * 60 + d.getMinutes();
+    const startMin = startH * 60 + startM;
+    const day = d.getDay();
+    const isoDay = day === 0 ? 7 : day;
+
+    if (this.isWithinWorkingHours(d)) return d;
+
+    d.setHours(startH, startM, 0, 0);
+    if (currentMin > startMin || !this.workDays.includes(isoDay)) {
+      d.setDate(d.getDate() + 1);
+      for (let i = 0; i < 8; i++) {
+        const nextDay = d.getDay() === 0 ? 7 : d.getDay();
+        if (this.workDays.includes(nextDay)) return d;
+        d.setDate(d.getDate() + 1);
+      }
+    }
+    return d;
+  }
+
+  /** Задержка перед отправкой init (rate limit + джиттер), мс. */
+  getInitRateDelayMs(): number {
+    const min = this.config.get<number>('INIT_RATE_DELAY_MIN', 5) * 1000;
+    const max = this.config.get<number>('INIT_RATE_DELAY_MAX', 30) * 1000;
+    return min + Math.floor(Math.random() * (max - min + 1));
+  }
+
+  get initMaxAttempts(): number {
+    return this.config.get<number>('INIT_MAX_ATTEMPTS', 3);
+  }
+
+  /** Задержки для follow-up: часы для шага 1, дни для 2 и 3. */
+  get followup1DelayHours(): number {
+    return this.config.get<number>('FOLLOWUP_1_DELAY_HOURS', 24);
+  }
+  get followup2DelayDays(): number {
+    return this.config.get<number>('FOLLOWUP_2_DELAY_DAYS', 3);
+  }
+  get followup3DelayDays(): number {
+    return this.config.get<number>('FOLLOWUP_3_DELAY_DAYS', 10);
+  }
+
+  /** Часы до просрочки handoff (SLA). */
+  get handoffSlaHours(): number {
+    return this.config.get<number>('HANDOFF_SLA_HOURS', 2);
+  }
 }

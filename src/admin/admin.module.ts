@@ -4,6 +4,7 @@ import { DialogModule } from '../dialog/dialog.module';
 import { EscalationModule } from '../escalation/escalation.module';
 import { RagModule } from '../rag/rag.module';
 import { AdminConfigController } from './controllers/admin-config.controller';
+import { AdminDashboardController } from './controllers/admin-dashboard.controller';
 import { AdminEscalationController } from './controllers/admin-escalation.controller';
 import { AdminManagersController } from './controllers/admin-managers.controller';
 import { AdminTestController } from './controllers/admin-test.controller';
@@ -15,6 +16,7 @@ import { AdminPromptsController } from './controllers/admin-prompts.controller';
   imports: [DatabaseModule, EscalationModule, DialogModule, RagModule],
   controllers: [
     AdminConfigController,
+    AdminDashboardController,
     AdminManagersController,
     AdminEscalationController,
     AdminTestController,

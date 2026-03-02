@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './index.css';
 import { ErrorBoundary } from './ErrorBoundary';
 
-type Tab = 'config' | 'managers' | 'stoplist' | 'sessions' | 'knowledge' | 'prompts' | 'followup' | 'test';
+type Tab = 'dashboard' | 'config' | 'managers' | 'stoplist' | 'sessions' | 'knowledge' | 'prompts' | 'followup' | 'test';
 
 type SystemConfig = {
   rateLimitPerMinute: number;
@@ -53,7 +53,7 @@ function formatDate(value: string | null | undefined): string {
 }
 
 export const App: React.FC = () => {
-  const [tab, setTab] = useState<Tab>('config');
+  const [tab, setTab] = useState<Tab>('dashboard');
 
   return (
     <div className="app">
@@ -64,6 +64,7 @@ export const App: React.FC = () => {
 
       <main className="main">
         <nav className="tabs">
+          <button className={tab === 'dashboard' ? 'active' : ''} onClick={() => setTab('dashboard')}>Дашборд</button>
           <button className={tab === 'config' ? 'active' : ''} onClick={() => setTab('config')}>Конфиг</button>
           <button className={tab === 'managers' ? 'active' : ''} onClick={() => setTab('managers')}>Менеджеры</button>
           <button className={tab === 'stoplist' ? 'active' : ''} onClick={() => setTab('stoplist')}>Стоп-лист</button>
@@ -75,6 +76,7 @@ export const App: React.FC = () => {
         </nav>
 
         <div className="tab-content" style={{ minHeight: 200 }}>
+          {tab === 'dashboard' && <ErrorBoundary><DashboardSection /></ErrorBoundary>}
           {tab === 'config' && <ErrorBoundary><ConfigSection /></ErrorBoundary>}
           {tab === 'managers' && <ErrorBoundary><ManagersSection /></ErrorBoundary>}
           {tab === 'stoplist' && <ErrorBoundary><StopListSection /></ErrorBoundary>}
@@ -88,6 +90,100 @@ export const App: React.FC = () => {
     </div>
   );
 };
+
+type DashboardStats = {
+  sessionsByStatus: Record<string, number>;
+  totalSessions: number;
+  messagesToday: number;
+  handoffsCount: number;
+  stopListCount: number;
+  managersCount: number;
+  pendingOffHours: number;
+};
+
+function DashboardSection() {
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    setError(null);
+    api('dashboard')
+      .then((r) => r.json())
+      .then(setStats)
+      .catch(() => { setStats(null); setError('Не удалось загрузить дашборд'); })
+      .finally(() => setLoading(false));
+  }, []);
+
+  if (loading) return <p>Загрузка…</p>;
+  if (error || !stats) return <p>{error ?? 'Нет данных'}</p>;
+
+  const statusLabels: Record<string, string> = {
+    PENDING_INIT: 'Ожидание init',
+    INIT_SENT: 'Init отправлен',
+    ENGAGED: 'В диалоге',
+    QUALIFYING: 'Квалификация',
+    PRESENTING: 'Презентация',
+    SCHEDULING_ZOOM: 'Запись на Zoom',
+    ZOOM_BOOKED: 'Zoom забронирован',
+    FOLLOWUP_1: 'Follow-up 1',
+    FOLLOWUP_2: 'Follow-up 2',
+    FOLLOWUP_3: 'Follow-up 3',
+    HANDOFF_TO_HUMAN: 'Передано менеджеру',
+    INIT_FAILED: 'Init ошибка',
+    CLOSED: 'Закрыто',
+  };
+
+  return (
+    <section>
+      <h2>Сводка</h2>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+        <div className="card" style={{ minWidth: 120 }}>
+          <strong>Всего сессий</strong>
+          <div style={{ fontSize: '1.5rem' }}>{stats.totalSessions}</div>
+        </div>
+        <div className="card" style={{ minWidth: 120 }}>
+          <strong>Сообщений сегодня</strong>
+          <div style={{ fontSize: '1.5rem' }}>{stats.messagesToday}</div>
+        </div>
+        <div className="card" style={{ minWidth: 120 }}>
+          <strong>Эскалаций</strong>
+          <div style={{ fontSize: '1.5rem' }}>{stats.handoffsCount}</div>
+        </div>
+        <div className="card" style={{ minWidth: 120 }}>
+          <strong>Стоп-лист</strong>
+          <div style={{ fontSize: '1.5rem' }}>{stats.stopListCount}</div>
+        </div>
+        <div className="card" style={{ minWidth: 120 }}>
+          <strong>Активных менеджеров</strong>
+          <div style={{ fontSize: '1.5rem' }}>{stats.managersCount}</div>
+        </div>
+        <div className="card" style={{ minWidth: 120 }}>
+          <strong>В очереди off-hours</strong>
+          <div style={{ fontSize: '1.5rem' }}>{stats.pendingOffHours}</div>
+        </div>
+      </div>
+      <h3>Сессии по статусам</h3>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Статус</th>
+            <th>Количество</th>
+          </tr>
+        </thead>
+        <tbody>
+          {Object.entries(stats.sessionsByStatus)
+            .sort((a, b) => b[1] - a[1])
+            .map(([status, count]) => (
+              <tr key={status}>
+                <td>{statusLabels[status] ?? status}</td>
+                <td>{count}</td>
+              </tr>
+            ))}
+        </tbody>
+      </table>
+    </section>
+  );
+}
 
 function ConfigSection() {
   const [config, setConfig] = useState<Record<string, unknown> | null>(null);

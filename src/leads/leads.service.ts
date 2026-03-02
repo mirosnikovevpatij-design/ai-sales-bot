@@ -3,12 +3,14 @@ import { Injectable } from '@nestjs/common';
 import { Queue } from 'bullmq';
 import { PrismaService } from '../database/prisma.service';
 import { StopListService } from '../stop-list/stop-list.service';
+import { AppConfigService } from '../config/config.service';
 
 @Injectable()
 export class LeadsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stopListService: StopListService,
+    private readonly appConfig: AppConfigService,
     @InjectQueue('init_queue') private readonly initQueue: Queue,
   ) {}
 
@@ -131,7 +133,23 @@ export class LeadsService {
       },
     });
 
-    await this.initQueue.add('init', { leadSessionId: session.id });
+    const now = new Date();
+    let delayMs = 0;
+    if (!this.appConfig.isWithinWorkingHours(now)) {
+      const runAt = this.appConfig.getNextWorkingWindowStart(now);
+      delayMs = Math.max(0, runAt.getTime() - now.getTime());
+    } else {
+      delayMs = this.appConfig.getInitRateDelayMs();
+    }
+    await this.initQueue.add(
+      'init',
+      { leadSessionId: session.id },
+      {
+        delay: delayMs,
+        attempts: this.appConfig.initMaxAttempts,
+        backoff: { type: 'exponential', delay: 60_000 },
+      },
+    );
 
     return { session, skipped: false };
   }

@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { ClientLanguage, FollowupStatus } from '@prisma/client';
+import { AppConfigService } from '../config/config.service';
 
 const FALLBACK_TEXTS: Record<number, string> = {
   1: 'Подскажите, актуально ли вам сейчас увеличить поток заявок через автообзвоны?',
@@ -12,7 +13,24 @@ const FALLBACK_TEXTS: Record<number, string> = {
 export class FollowupService {
   private readonly logger = new Logger(FollowupService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly appConfig: AppConfigService,
+  ) {}
+
+  /** Дата/время для отправки follow-up по шагу (из конфига FOLLOWUP_1_DELAY_HOURS, FOLLOWUP_2/3_DELAY_DAYS). */
+  getFollowupDueAt(step: 1 | 2 | 3): Date {
+    const now = new Date();
+    const d = new Date(now);
+    if (step === 1) {
+      d.setHours(d.getHours() + this.appConfig.followup1DelayHours);
+    } else if (step === 2) {
+      d.setDate(d.getDate() + this.appConfig.followup2DelayDays);
+    } else {
+      d.setDate(d.getDate() + this.appConfig.followup3DelayDays);
+    }
+    return d;
+  }
 
   /** Текст шаблона по шагу, языку сессии и варианту (A/B). */
   async getTemplateText(
@@ -83,6 +101,11 @@ export class FollowupService {
             status: f.step === 1 ? 'FOLLOWUP_1' : f.step === 2 ? 'FOLLOWUP_2' : 'FOLLOWUP_3',
           },
         });
+        if (f.step === 1) {
+          await this.scheduleFollowup(f.leadSessionId, 2, this.getFollowupDueAt(2));
+        } else if (f.step === 2) {
+          await this.scheduleFollowup(f.leadSessionId, 3, this.getFollowupDueAt(3));
+        }
       } catch (err) {
         this.logger.warn(`Followup ${f.id} failed: ${err}`);
         await this.prisma.followup.update({

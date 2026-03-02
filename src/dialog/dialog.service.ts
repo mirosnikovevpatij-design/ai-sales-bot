@@ -3,6 +3,16 @@ import { LeadSessionStatus } from '@prisma/client';
 import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
 
+/** Состояние диалога для квалификации (ТЗ: ниша, цель, объём, география). */
+export interface ConversationState {
+  niche?: string;
+  goal?: string;
+  volume?: string;
+  geography?: string;
+  currentStep?: string;
+  lastUpdatedAt?: string;
+}
+
 @Injectable()
 export class DialogService {
   constructor(
@@ -10,7 +20,11 @@ export class DialogService {
     private readonly llm: LlmService,
   ) {}
 
-  async handleIncomingMessage(leadSessionId: string, text: string): Promise<string> {
+  async handleIncomingMessage(
+    leadSessionId: string,
+    text: string,
+    options?: { skipCreateInMessage?: boolean },
+  ): Promise<string> {
     const session = await this.prisma.leadSession.findUnique({
       where: { id: leadSessionId },
     });
@@ -19,24 +33,34 @@ export class DialogService {
       throw new Error('Lead session not found');
     }
 
-    await this.prisma.message.create({
-      data: {
-        leadSessionId,
-        direction: 'IN',
-        channel: 'WHATSAPP',
-        messageType: 'text',
-        text,
-        status: 'DELIVERED',
-      },
-    });
+    if (!options?.skipCreateInMessage) {
+      await this.prisma.message.create({
+        data: {
+          leadSessionId,
+          direction: 'IN',
+          channel: 'WHATSAPP',
+          messageType: 'text',
+          text,
+          status: 'DELIVERED',
+        },
+      });
+    }
 
     const nextStatus = this.getNextStatus(session.status);
+    const now = new Date();
+    const prevState = (session.conversationStateJson as ConversationState | null) ?? {};
+    const conversationStateJson: ConversationState = {
+      ...prevState,
+      currentStep: nextStatus,
+      lastUpdatedAt: now.toISOString(),
+    };
 
     await this.prisma.leadSession.update({
       where: { id: leadSessionId },
       data: {
         status: nextStatus,
-        lastClientMessageAt: new Date(),
+        lastClientMessageAt: now,
+        conversationStateJson: conversationStateJson as object,
       },
     });
 
@@ -74,9 +98,7 @@ export class DialogService {
 
     await this.prisma.leadSession.update({
       where: { id: leadSessionId },
-      data: {
-        lastBotMessageAt: new Date(),
-      },
+      data: { lastBotMessageAt: new Date() },
     });
 
     return reply;
