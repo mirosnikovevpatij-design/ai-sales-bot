@@ -135,7 +135,7 @@ export class DialogService {
   private buildReply(status: LeadSessionStatus): string {
     switch (status) {
       case LeadSessionStatus.ENGAGED:
-        return 'Спасибо за ответ! Давайте начнём с небольшого уточнения по вашему бизнесу.';
+        return 'Напишите, пожалуйста, как к вам обращаться и чем занимается ваша компания?';
       case LeadSessionStatus.QUALIFYING:
         return 'Записал информацию. Расскажите, пожалуйста, какой сейчас объём базы для обзвона?';
       case LeadSessionStatus.PRESENTING:
@@ -189,7 +189,10 @@ export class DialogService {
       orderBy: { version: 'desc' },
     });
     const template = row?.content?.trim() || DEFAULT_SYSTEM_PROMPT;
-    return template.replace(/\{\{\s*currentStep\s*\}\}/gi, String(currentStep));
+    const withStep = template.replace(/\{\{\s*currentStep\s*\}\}/gi, String(currentStep));
+    const nameRule =
+      '\n\nОбращение по имени: на этапе ENGAGED после приветствия задай один вопрос: «Напишите, пожалуйста, как к вам обращаться и чем занимается ваша компания?» Если клиент назвал имя (как к нему обращаться) — дальше обращайся по имени и на «вы» (например: «Иван, скажите…»). Если написал только про деятельность, без имени — обращайся только на «вы», без имени. Никогда не придумывай и не угадывай имена. Не начинай каждое сообщение со слова «Отлично» — чередуй: «Хорошо.» / «Понял.» / «Скажите, пожалуйста…» / «Тогда такой вопрос…» и т.п.';
+    return withStep + nameRule;
   }
 
   /** Добавляет к системному промпту релевантные фрагменты из базы знаний (инструкции для бота). */
