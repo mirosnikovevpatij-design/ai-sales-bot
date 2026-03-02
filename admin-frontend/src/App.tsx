@@ -700,14 +700,17 @@ function KnowledgeSection() {
   );
 }
 
+const DEFAULT_BOT_PROMPT = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: {{currentStep}}.`;
+
 function PromptsSection() {
   const [groups, setGroups] = useState<{ key: string; versions: { id: number; version: number; isActive: boolean; isAbTest: boolean; abTrafficPercent: number | null; content: string; createdAt: string }[] }[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [showAdd, setShowAdd] = useState(false);
-  const [form, setForm] = useState({ key: '', content: '' });
+  const [form, setForm] = useState({ key: 'dialog_system', content: DEFAULT_BOT_PROMPT });
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editContent, setEditContent] = useState('');
+  const [viewPrompt, setViewPrompt] = useState<{ key: string; content: string } | null>(null);
   const load = () => {
     setError(null);
     api('prompts')
@@ -751,7 +754,8 @@ function PromptsSection() {
   return (
     <section className="card">
       <h2>Промпты</h2>
-      <p className="subtitle">Версионирование и A/B тесты. Активная версия используется в диалоге.</p>
+      <p className="subtitle">Системные инструкции для бота. Активная версия по ключу <strong>dialog_system</strong> используется в диалоге и в тестовом чате.</p>
+      <p className="subtitle" style={{ marginTop: '0.25rem' }}>В тексте можно использовать переменную <code style={{ background: 'var(--border)', padding: '0.1rem 0.3rem', borderRadius: 4 }}>{'{{currentStep}}'}</code> — подставится этап воронки (ENGAGED, QUALIFYING и т.д.).</p>
       {error && <p className="error-msg">{error}</p>}
       {loading ? <p className="subtitle">Загрузка…</p> : (
         <>
@@ -767,7 +771,8 @@ function PromptsSection() {
                     <td>{v.isAbTest ? `B ${v.abTrafficPercent ?? 50}%` : 'A'}</td>
                     <td>{formatDate(v.createdAt)}</td>
                     <td>
-                      {!v.isActive && <button type="button" className="btn btn-primary btn-sm" onClick={() => setActive(v.id, true)}>Сделать активным</button>}
+                      <button type="button" className="btn btn-primary btn-sm" style={{ marginRight: '0.25rem' }} onClick={() => setViewPrompt({ key: g.key, content: v.content })}>Просмотр</button>
+                      {!v.isActive && <button type="button" className="btn btn-ghost btn-sm" onClick={() => setActive(v.id, true)}>Сделать активным</button>}
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => { setEditingId(v.id); setEditContent(v.content); }}>Редактировать</button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setAbTest(v.id, !v.isAbTest, v.abTrafficPercent ?? 50)}>{v.isAbTest ? 'Выкл A/B' : 'Вкл A/B'}</button>
                       <button type="button" className="btn btn-ghost btn-sm btn-danger" onClick={() => removePrompt(v.id)}>Удалить</button>
@@ -777,19 +782,33 @@ function PromptsSection() {
               </tbody>
             </table>
           </div>
+          {viewPrompt !== null && (
+            <div style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(0,0,0,0.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }} onClick={() => setViewPrompt(null)}>
+              <div style={{ background: 'var(--bg)', borderRadius: 8, maxWidth: 640, width: '100%', maxHeight: '85vh', overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: '0 4px 20px rgba(0,0,0,0.2)' }} onClick={(e) => e.stopPropagation()}>
+                <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <strong>Промпт: {viewPrompt.key}</strong>
+                  <button type="button" className="btn btn-ghost btn-sm" onClick={() => setViewPrompt(null)}>Закрыть</button>
+                </div>
+                <div style={{ padding: '1rem 1.25rem', overflow: 'auto', flex: 1, whiteSpace: 'pre-wrap', fontFamily: 'var(--font-mono, monospace)', fontSize: '0.9rem', lineHeight: 1.5 }}>
+                  {viewPrompt.content || '(пусто)'}
+                </div>
+              </div>
+            </div>
+          )}
           {editingId != null && (
             <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
               <h3 style={{ fontSize: '0.95rem' }}>Редактирование контента</h3>
-              <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={8} style={{ width: '100%', marginTop: '0.5rem' }} />
+              <p className="subtitle" style={{ marginBottom: '0.5rem' }}>Можно использовать {'{{currentStep}}'} — подставится этап диалога.</p>
+              <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={10} style={{ width: '100%', marginTop: '0.5rem' }} />
               <div className="form-actions" style={{ marginTop: '0.5rem' }}><button type="button" className="btn btn-primary" onClick={saveEdit}>Сохранить</button><button type="button" className="btn btn-ghost" onClick={() => { setEditingId(null); setEditContent(''); }}>Отмена</button></div>
             </div>
           )}
           {!showAdd ? (
-            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowAdd(true)}>Добавить промпт (новая версия)</button>
+            <button type="button" className="btn btn-primary" style={{ marginTop: '1rem' }} onClick={() => setShowAdd(true)}>Добавить промпт (ключ / новая версия)</button>
           ) : (
             <form onSubmit={addPrompt} style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-              <div className="form-row"><label>Ключ (уникальный)</label><input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} placeholder="system_seller" required /></div>
-              <div className="form-row"><label>Текст промпта</label><textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} rows={6} style={{ width: '100%' }} /></div>
+              <div className="form-row"><label>Ключ</label><input value={form.key} onChange={(e) => setForm((f) => ({ ...f, key: e.target.value }))} placeholder="dialog_system — основной промпт бота" required /></div>
+              <div className="form-row"><label>Текст промпта (переменная {'{{currentStep}}'} подставится автоматически)</label><textarea value={form.content} onChange={(e) => setForm((f) => ({ ...f, content: e.target.value }))} rows={8} style={{ width: '100%' }} /></div>
               <div className="form-actions"><button type="submit" className="btn btn-primary">Добавить</button><button type="button" className="btn btn-ghost" onClick={() => setShowAdd(false)}>Отмена</button></div>
             </form>
           )}

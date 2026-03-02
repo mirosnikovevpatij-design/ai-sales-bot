@@ -4,6 +4,11 @@ import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { RagService } from '../rag/rag.service';
 
+/** Ключ системного промпта бота в таблице Prompt (редактируется в админке). */
+export const DIALOG_SYSTEM_PROMPT_KEY = 'dialog_system';
+
+const DEFAULT_SYSTEM_PROMPT = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: {{currentStep}}.`;
+
 /** Состояние диалога для квалификации (ТЗ: ниша, цель, объём, география). */
 export interface ConversationState {
   niche?: string;
@@ -80,7 +85,7 @@ export class DialogService {
           role: m.direction === 'IN' ? ('user' as const) : ('assistant' as const),
           content: m.text!,
         }));
-      const basePrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${nextStatus}.`;
+      const basePrompt = await this.getSystemPromptTemplate(nextStatus);
       const systemPrompt = await this.buildSystemPromptWithRag(basePrompt, text);
       const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
       reply = llmReply && llmReply.length > 0 ? llmReply : this.buildReply(nextStatus);
@@ -157,13 +162,23 @@ export class DialogService {
   ): Promise<string> {
     const userMessages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user' as const, content: newUserText }];
     const syntheticStatus = this.getTestSyntheticStatus(userMessages.length);
-    const basePrompt = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: ${syntheticStatus}.`;
+    const basePrompt = await this.getSystemPromptTemplate(syntheticStatus);
     const systemPrompt = await this.buildSystemPromptWithRag(basePrompt, newUserText);
     if (this.llm.isConfigured) {
       const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
       if (llmReply && llmReply.length > 0) return llmReply;
     }
     return this.buildReply(syntheticStatus);
+  }
+
+  /** Берёт шаблон системного промпта из БД (ключ dialog_system) или дефолт. Подставляет {{currentStep}}. */
+  private async getSystemPromptTemplate(currentStep: LeadSessionStatus): Promise<string> {
+    const row = await this.prisma.prompt.findFirst({
+      where: { key: DIALOG_SYSTEM_PROMPT_KEY, isActive: true },
+      orderBy: { version: 'desc' },
+    });
+    const template = row?.content?.trim() || DEFAULT_SYSTEM_PROMPT;
+    return template.replace(/\{\{\s*currentStep\s*\}\}/gi, String(currentStep));
   }
 
   /** Добавляет к системному промпту релевантные фрагменты из базы знаний (инструкции для бота). */

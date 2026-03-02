@@ -118,61 +118,63 @@ export class AdminKnowledgeController {
   }
 
   private async indexDocumentContent(documentId: string, content: string): Promise<void> {
-    const chunks = this.splitIntoChunks(content);
-    for (let i = 0; i < chunks.length; i++) {
+    const chunks = this.splitByMeaning(content);
+    for (const chunk of chunks) {
       await this.prisma.knowledgeFragment.create({
         data: {
           documentId,
-          content: chunks[i],
+          content: chunk.trim(),
           sourceFile: null,
         },
       });
     }
-    const count = chunks.length;
     await this.prisma.knowledgeDocument.update({
       where: { id: documentId },
       data: {
         indexingStatus: 'INDEXED',
-        fragmentCount: count,
+        fragmentCount: chunks.length,
         errorMessage: null,
         indexedAt: new Date(),
       },
     });
   }
 
-  private splitIntoChunks(text: string): string[] {
-    const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim());
-    if (paragraphs.length === 0) {
-      return text.length <= CHUNK_SIZE ? [text] : this.slideChunks(text);
-    }
+  /**
+   * Режет документ по смыслу: по заголовкам (##, ###) и параграфам.
+   * Не режет посередине предложения — только по границам разделов и абзацев.
+   */
+  private splitByMeaning(text: string): string[] {
+    const MAX_CHUNK = CHUNK_SIZE;
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+
+    const sections = trimmed.split(/\n(?=#{1,6}\s)/).map((s) => s.trim()).filter(Boolean);
     const chunks: string[] = [];
-    let current = '';
-    for (const p of paragraphs) {
-      const next = current ? current + '\n\n' + p : p;
-      if (next.length <= CHUNK_SIZE) {
-        current = next;
-      } else {
-        if (current) chunks.push(current);
-        if (p.length <= CHUNK_SIZE) {
-          current = p;
+
+    for (const section of sections) {
+      if (section.length <= MAX_CHUNK) {
+        chunks.push(section);
+        continue;
+      }
+      const paragraphs = section.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+      let current = '';
+      for (const p of paragraphs) {
+        const next = current ? current + '\n\n' + p : p;
+        if (next.length <= MAX_CHUNK) {
+          current = next;
         } else {
-          chunks.push(...this.slideChunks(p));
-          current = '';
+          if (current) chunks.push(current);
+          if (p.length <= MAX_CHUNK) {
+            current = p;
+          } else {
+            chunks.push(p.slice(0, MAX_CHUNK));
+            current = p.slice(MAX_CHUNK);
+          }
         }
       }
+      if (current) chunks.push(current);
     }
-    if (current) chunks.push(current);
-    return chunks.length ? chunks : [text];
-  }
 
-  private slideChunks(text: string): string[] {
-    const result: string[] = [];
-    let start = 0;
-    while (start < text.length) {
-      const end = Math.min(start + CHUNK_SIZE, text.length);
-      result.push(text.slice(start, end));
-      start += CHUNK_SIZE - CHUNK_OVERLAP;
-    }
-    return result;
+    return chunks.length ? chunks : [trimmed];
   }
 }
