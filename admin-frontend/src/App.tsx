@@ -649,7 +649,7 @@ function KnowledgeSection() {
                     <td>{d.fragmentCount ?? 0}</td>
                     <td>{formatDate(d.uploadedAt)}</td>
                     <td>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => viewDocument(d.id)}>Просмотр</button>
+                      <button type="button" className="btn btn-primary btn-sm" onClick={() => viewDocument(d.id)} style={{ marginRight: '0.5rem' }}>Просмотр</button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => reindex(d.id)}>Переиндексировать</button>
                       <button type="button" className="btn btn-ghost btn-sm btn-danger" style={{ marginLeft: '0.25rem' }} onClick={() => removeDoc(d.id)}>Удалить</button>
                     </td>
