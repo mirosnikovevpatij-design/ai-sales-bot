@@ -467,6 +467,31 @@ tr:hover td {
   font-weight: 600;
 }
 
+.funnel-steps-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.funnel-step-row {
+  padding: 0.75rem 1rem;
+  background: var(--bg-page);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.funnel-step-key {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: 0.5rem;
+}
+
+.funnel-step-row .form-row input {
+  max-width: 100%;
+}
+
 .prompt-display {
   white-space: pre-wrap;
   word-break: break-word;

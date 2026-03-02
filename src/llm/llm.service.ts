@@ -27,6 +27,58 @@ export class LlmService {
     return !!this.apiKey;
   }
 
+  /**
+   * Анализирует документ и возвращает смысловые фрагменты (нарезка по смыслу через ИИ).
+   * Возвращает пустой массив при ошибке или если ИИ не настроен.
+   */
+  async splitDocumentByMeaning(content: string): Promise<string[]> {
+    if (!this.isConfigured || !content?.trim()) return [];
+
+    const maxInputLen = 35000;
+    const text = content.trim().length > maxInputLen ? content.trim().slice(0, maxInputLen) + '\n\n[... документ обрезан ...]' : content.trim();
+
+    const systemPrompt = `Ты анализируешь документ для базы знаний бота. Разбей его на смысловые фрагменты: каждый фрагмент — законченная мысль, раздел или ответ на один вопрос. Не режь посередине предложения. Верни только валидный JSON-массив строк, без пояснений и без markdown-обёртки. Пример: ["первый фрагмент текста", "второй фрагмент"].`;
+    const userPrompt = `Разбей этот документ на смысловые фрагменты и верни только JSON-массив строк:\n\n${text}`;
+
+    try {
+      const { data } = await axios.post<{ choices?: { message?: { content?: string } }[] }>(
+        `${this.baseUrl}/chat/completions`,
+        {
+          model: this.model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 8000,
+          temperature: 0.3,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${this.apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 60000,
+        },
+      );
+
+      const raw = data?.choices?.[0]?.message?.content?.trim();
+      if (!raw) return [];
+
+      const jsonStr = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+      const parsed = JSON.parse(jsonStr) as unknown;
+      if (!Array.isArray(parsed)) return [];
+
+      const chunks = parsed
+        .filter((item): item is string => typeof item === 'string')
+        .map((s) => s.trim())
+        .filter(Boolean);
+      return chunks;
+    } catch (err: any) {
+      this.logger.warn(`splitDocumentByMeaning failed: ${err.message}`);
+      return [];
+    }
+  }
+
   async generateReply(systemPrompt: string, userMessages: { role: 'user' | 'assistant'; content: string }[]): Promise<string | null> {
     if (!this.isConfigured) return null;
 

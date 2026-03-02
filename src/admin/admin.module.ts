@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../database/database.module';
 import { DialogModule } from '../dialog/dialog.module';
 import { EscalationModule } from '../escalation/escalation.module';
+import { LlmModule } from '../llm/llm.module';
 import { RagModule } from '../rag/rag.module';
 import { AdminConfigController } from './controllers/admin-config.controller';
 import { AdminDashboardController } from './controllers/admin-dashboard.controller';
@@ -13,7 +14,7 @@ import { AdminKnowledgeController } from './controllers/admin-knowledge.controll
 import { AdminPromptsController } from './controllers/admin-prompts.controller';
 
 @Module({
-  imports: [DatabaseModule, EscalationModule, DialogModule, RagModule],
+  imports: [DatabaseModule, EscalationModule, DialogModule, LlmModule, RagModule],
   controllers: [
     AdminConfigController,
     AdminDashboardController,

@@ -14,6 +14,15 @@ import { DEFAULT_SYSTEM_PROMPT } from '../../dialog/dialog.service';
 import { PrismaService } from '../../database/prisma.service';
 
 const MAIN_PROMPT_KEY = 'dialog_system';
+const FUNNEL_STEPS_CONFIG_KEY = 'funnel_steps';
+
+const DEFAULT_FUNNEL_STEPS: { step: string; label: string; description: string }[] = [
+  { step: 'ENGAGED', label: 'Вовлечение', description: 'Первый контакт с лидом, установление диалога.' },
+  { step: 'QUALIFYING', label: 'Квалификация', description: 'Уточнение ниши, цели, объёма базы, географии.' },
+  { step: 'PRESENTING', label: 'Презентация', description: 'Рассказ о продукте/услуге и выгодах.' },
+  { step: 'SCHEDULING_ZOOM', label: 'Приглашение на Zoom', description: 'Предложение встречи в Zoom, выбор даты и времени.' },
+  { step: 'ZOOM_BOOKED', label: 'Zoom забронирован', description: 'Встреча подтверждена, ожидание звонка.' },
+];
 
 @Controller('admin/prompts')
 export class AdminPromptsController {
@@ -93,6 +102,50 @@ export class AdminPromptsController {
       data: { isActive: false },
     });
     return { content: created.content };
+  }
+
+  /** Список шагов воронки (название и описание), для редактирования в админке. */
+  @Get('funnel-steps')
+  async getFunnelSteps() {
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { key: FUNNEL_STEPS_CONFIG_KEY },
+      });
+      const value = row?.value;
+      if (Array.isArray(value) && value.length > 0) {
+        const steps = value
+          .filter((s) => s && typeof s === 'object' && typeof (s as any).step === 'string')
+          .map((s) => ({
+            step: String((s as any).step),
+            label: typeof (s as any).label === 'string' ? (s as any).label : '',
+            description: typeof (s as any).description === 'string' ? (s as any).description : '',
+          }));
+        if (steps.length) return { steps };
+      }
+    } catch {}
+    return { steps: DEFAULT_FUNNEL_STEPS };
+  }
+
+  /** Сохранить шаги воронки (названия и описания). Ключи step не меняются. */
+  @Put('funnel-steps')
+  async putFunnelSteps(@Body() body: { steps?: Array<{ step: string; label?: string; description?: string }> }) {
+    const input = Array.isArray(body?.steps) ? body.steps : [];
+    const existingKeys = DEFAULT_FUNNEL_STEPS.map((s) => s.step);
+    const steps = existingKeys.map((key) => {
+      const found = input.find((s) => s?.step === key);
+      const def = DEFAULT_FUNNEL_STEPS.find((d) => d.step === key)!;
+      return {
+        step: key,
+        label: typeof found?.label === 'string' ? found.label.trim() || def.label : def.label,
+        description: typeof found?.description === 'string' ? found.description.trim() || def.description : def.description,
+      };
+    });
+    await this.prisma.systemConfig.upsert({
+      where: { key: FUNNEL_STEPS_CONFIG_KEY },
+      create: { key: FUNNEL_STEPS_CONFIG_KEY, value: steps as any },
+      update: { value: steps as any },
+    });
+    return { steps };
   }
 
   @Get()

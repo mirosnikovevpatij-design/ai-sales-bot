@@ -9,16 +9,15 @@ import {
   Post,
 } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service';
+import { LlmService } from '../../llm/llm.service';
 import { RagService } from '../../rag/rag.service';
-
-const CHUNK_SIZE = 800;
-const CHUNK_OVERLAP = 100;
 
 @Controller('admin/knowledge')
 export class AdminKnowledgeController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly rag: RagService,
+    private readonly llm: LlmService,
   ) {}
 
   @Get('documents')
@@ -118,21 +117,33 @@ export class AdminKnowledgeController {
   }
 
   private async indexDocumentContent(documentId: string, content: string): Promise<void> {
-    const chunks = this.splitByMeaning(content);
+    let chunks: string[] = [];
+
+    if (this.llm.isConfigured) {
+      chunks = await this.llm.splitDocumentByMeaning(content);
+    }
+
+    if (chunks.length === 0) {
+      chunks = this.splitByMeaningFallback(content);
+    }
+
     for (const chunk of chunks) {
+      const trimmed = chunk.trim();
+      if (!trimmed) continue;
       await this.prisma.knowledgeFragment.create({
         data: {
           documentId,
-          content: chunk.trim(),
+          content: trimmed,
           sourceFile: null,
         },
       });
     }
+
     await this.prisma.knowledgeDocument.update({
       where: { id: documentId },
       data: {
         indexingStatus: 'INDEXED',
-        fragmentCount: chunks.length,
+        fragmentCount: chunks.filter((c) => c.trim()).length,
         errorMessage: null,
         indexedAt: new Date(),
       },
@@ -140,11 +151,10 @@ export class AdminKnowledgeController {
   }
 
   /**
-   * Режет документ по смыслу: по заголовкам (##, ###) и параграфам.
-   * Не режет посередине предложения — только по границам разделов и абзацев.
+   * Резервная нарезка по смыслу без ИИ: по заголовкам и параграфам.
+   * Не режет по фиксированному размеру — только по границам разделов и абзацев.
    */
-  private splitByMeaning(text: string): string[] {
-    const MAX_CHUNK = CHUNK_SIZE;
+  private splitByMeaningFallback(text: string): string[] {
     const trimmed = text.trim();
     if (!trimmed) return [];
 
@@ -152,27 +162,10 @@ export class AdminKnowledgeController {
     const chunks: string[] = [];
 
     for (const section of sections) {
-      if (section.length <= MAX_CHUNK) {
-        chunks.push(section);
-        continue;
-      }
       const paragraphs = section.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
-      let current = '';
       for (const p of paragraphs) {
-        const next = current ? current + '\n\n' + p : p;
-        if (next.length <= MAX_CHUNK) {
-          current = next;
-        } else {
-          if (current) chunks.push(current);
-          if (p.length <= MAX_CHUNK) {
-            current = p;
-          } else {
-            chunks.push(p.slice(0, MAX_CHUNK));
-            current = p.slice(MAX_CHUNK);
-          }
-        }
+        if (p) chunks.push(p);
       }
-      if (current) chunks.push(current);
     }
 
     return chunks.length ? chunks : [trimmed];

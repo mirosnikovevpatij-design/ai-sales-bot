@@ -703,9 +703,12 @@ function KnowledgeSection() {
   );
 }
 
+type FunnelStepRow = { step: string; label: string; description: string };
+
 function PromptsSection() {
   const [content, setContent] = useState<string>('');
   const [initContent, setInitContent] = useState<string>('');
+  const [funnelSteps, setFunnelSteps] = useState<FunnelStepRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
@@ -714,16 +717,28 @@ function PromptsSection() {
   const [initEditing, setInitEditing] = useState(false);
   const [initEditText, setInitEditText] = useState('');
   const [initSaving, setInitSaving] = useState(false);
+  const [stepsEditing, setStepsEditing] = useState(false);
+  const [stepsEdit, setStepsEdit] = useState<FunnelStepRow[]>([]);
+  const [stepsSaving, setStepsSaving] = useState(false);
 
   const load = () => {
     setError(null);
     Promise.all([
       api('prompts/main').then((r) => (r.ok ? r.json() : Promise.reject())),
       api('prompts/init-message').then((r) => (r.ok ? r.json() : Promise.reject())),
+      api('prompts/funnel-steps').then((r) => (r.ok ? r.json() : Promise.reject())),
     ])
-      .then(([main, init]) => {
+      .then(([main, init, stepsData]) => {
         setContent(typeof main?.content === 'string' ? main.content : '');
         setInitContent(typeof init?.content === 'string' ? init.content : '');
+        const steps = Array.isArray((stepsData as any)?.steps) ? (stepsData as any).steps : [];
+        setFunnelSteps(steps.length ? steps : [
+          { step: 'ENGAGED', label: 'Вовлечение', description: 'Первый контакт с лидом, установление диалога.' },
+          { step: 'QUALIFYING', label: 'Квалификация', description: 'Уточнение ниши, цели, объёма базы, географии.' },
+          { step: 'PRESENTING', label: 'Презентация', description: 'Рассказ о продукте/услуге и выгодах.' },
+          { step: 'SCHEDULING_ZOOM', label: 'Приглашение на Zoom', description: 'Предложение встречи в Zoom, выбор даты и времени.' },
+          { step: 'ZOOM_BOOKED', label: 'Zoom забронирован', description: 'Встреча подтверждена, ожидание звонка.' },
+        ]);
       })
       .catch(() => setError('Не удалось загрузить'))
       .finally(() => setLoading(false));
@@ -758,16 +773,25 @@ function PromptsSection() {
   };
   const cancelInitEdit = () => { setInitEditing(false); setInitEditText(''); };
 
-  if (loading) return <section className="card"><p>Загрузка…</p></section>;
-  if (error && !content && !initContent) return <section className="card"><p className="error-msg">{error}</p></section>;
+  const startStepsEdit = () => { setStepsEdit([...funnelSteps]); setStepsEditing(true); };
+  const saveSteps = () => {
+    setStepsSaving(true);
+    api('prompts/funnel-steps', { method: 'PUT', body: JSON.stringify({ steps: stepsEdit }) })
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data: { steps?: FunnelStepRow[] }) => {
+        if (Array.isArray(data?.steps)) setFunnelSteps(data.steps);
+        setStepsEditing(false);
+      })
+      .catch(() => setError('Не удалось сохранить шаги'))
+      .finally(() => setStepsSaving(false));
+  };
+  const cancelStepsEdit = () => { setStepsEditing(false); setStepsEdit([]); };
+  const updateStepAt = (index: number, field: 'label' | 'description', value: string) => {
+    setStepsEdit((prev) => prev.map((s, i) => i === index ? { ...s, [field]: value } : s));
+  };
 
-  const funnelSteps = [
-    { step: 'ENGAGED', label: 'Вовлечение', desc: 'Первый контакт с лидом, установление диалога.' },
-    { step: 'QUALIFYING', label: 'Квалификация', desc: 'Уточнение ниши, цели, объёма базы, географии.' },
-    { step: 'PRESENTING', label: 'Презентация', desc: 'Рассказ о продукте/услуге и выгодах.' },
-    { step: 'SCHEDULING_ZOOM', label: 'Приглашение на Zoom', desc: 'Предложение встречи в Zoom, выбор даты и времени.' },
-    { step: 'ZOOM_BOOKED', label: 'Zoom забронирован', desc: 'Встреча подтверждена, ожидание звонка.' },
-  ];
+  if (loading) return <section className="card"><p>Загрузка…</p></section>;
+  if (error && !content && !initContent && funnelSteps.length === 0) return <section className="card"><p className="error-msg">{error}</p></section>;
 
   return (
     <section className="card">
@@ -793,14 +817,52 @@ function PromptsSection() {
       )}
 
       <div className="prompt-funnel-steps">
-        <h3>Шаги воронки до приглашения на Zoom и далее</h3>
-        <ul>
-          {funnelSteps.map(({ step, label, desc }) => (
-            <li key={step}>
-              <strong>{step}</strong> — {label}. {desc}
-            </li>
-          ))}
-        </ul>
+        <h3>Шаги воронки</h3>
+        <p className="subtitle" style={{ marginBottom: '0.75rem' }}>Можно менять название и описание каждого шага. Ключ (ENGAGED, QUALIFYING и т.д.) используется в коде и не меняется.</p>
+        {!stepsEditing ? (
+          <>
+            <ul>
+              {funnelSteps.map(({ step, label, description }) => (
+                <li key={step}>
+                  <strong>{step}</strong> — {label}. {description}
+                </li>
+              ))}
+            </ul>
+            <div className="form-actions" style={{ marginTop: '0.75rem' }}>
+              <button type="button" className="btn btn-primary" onClick={startStepsEdit}>Редактировать шаги</button>
+            </div>
+          </>
+        ) : (
+          <>
+            <div className="funnel-steps-edit">
+              {(stepsEdit.length ? stepsEdit : funnelSteps).map((s, index) => (
+                <div key={s.step} className="funnel-step-row">
+                  <span className="funnel-step-key">{s.step}</span>
+                  <div className="form-row">
+                    <label>Название</label>
+                    <input
+                      value={stepsEdit[index]?.label ?? s.label}
+                      onChange={(e) => updateStepAt(index, 'label', e.target.value)}
+                      placeholder="Например: Вовлечение"
+                    />
+                  </div>
+                  <div className="form-row">
+                    <label>Описание</label>
+                    <input
+                      value={stepsEdit[index]?.description ?? s.description}
+                      onChange={(e) => updateStepAt(index, 'description', e.target.value)}
+                      placeholder="Краткое описание шага"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="form-actions" style={{ marginTop: '0.75rem' }}>
+              <button type="button" className="btn btn-primary" onClick={saveSteps} disabled={stepsSaving}>{stepsSaving ? 'Сохранение…' : 'Сохранить шаги'}</button>
+              <button type="button" className="btn btn-ghost" onClick={cancelStepsEdit} disabled={stepsSaving}>Отмена</button>
+            </div>
+          </>
+        )}
       </div>
       <h3 className="prompt-block-title">Основной промпт бота</h3>
       <p className="subtitle" style={{ marginBottom: '1rem' }}>Используется в диалоге и в тестовом чате. Переменная <code style={{ background: 'var(--border)', padding: '0.1rem 0.3rem', borderRadius: 4 }}>{'{{currentStep}}'}</code> подставится этапом воронки.</p>
