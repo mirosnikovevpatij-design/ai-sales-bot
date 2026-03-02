@@ -10,7 +10,7 @@ export class AdminTestController {
   @Post('scenario/start')
   async start() {
     try {
-      const initMessage = this.dialog.getTestInitialMessage();
+      const initMessage = await this.dialog.getInitMessageContent();
       return {
         sessionId: randomUUID(),
         initMessage,

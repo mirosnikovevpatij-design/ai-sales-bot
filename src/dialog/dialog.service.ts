@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { LeadSessionStatus } from '@prisma/client';
+import { DEFAULT_INIT_MESSAGE, INIT_MESSAGE_KEY } from '../constants/prompt-defaults';
 import { PrismaService } from '../database/prisma.service';
 import { LlmService } from '../llm/llm.service';
 import { RagService } from '../rag/rag.service';
@@ -148,7 +149,16 @@ export class DialogService {
     }
   }
 
-  /** Начальное сообщение для тестового чата (без записи в БД). */
+  /** Текст приветственного сообщения (из БД или дефолт) — для лидов и для тестового чата. */
+  async getInitMessageContent(): Promise<string> {
+    const row = await this.prisma.prompt.findFirst({
+      where: { key: INIT_MESSAGE_KEY, isActive: true },
+      orderBy: { version: 'desc' },
+    });
+    return (row?.content?.trim() || DEFAULT_INIT_MESSAGE) as string;
+  }
+
+  /** Начальное сообщение для тестового чата — то же приветствие, что и лидам (из БД). */
   getTestInitialMessage(): string {
     return this.buildReply(LeadSessionStatus.ENGAGED);
   }
