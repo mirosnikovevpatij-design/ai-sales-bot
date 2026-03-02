@@ -492,6 +492,74 @@ tr:hover td {
   max-width: 100%;
 }
 
+.funnel-step-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
+.funnel-step-num {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.phrases-list {
+  margin-top: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.phrase-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.phrase-input {
+  flex: 1;
+  min-width: 200px;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+
+.phrase-fixed {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.phrase-fixed input {
+  width: auto;
+}
+
+.prompt-block {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.prompt-block:last-child,
+.rules-block {
+  border-bottom: none;
+}
+
+.subtitle.hint {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+  margin-top: 0.25rem;
+  margin-bottom: 0.5rem;
+}
+
 .prompt-display {
   white-space: pre-wrap;
   word-break: break-word;

@@ -11,13 +11,15 @@ export const DIALOG_SYSTEM_PROMPT_KEY = 'dialog_system';
 /** Встроенный промпт по умолчанию (если в БД нет активной записи). */
 export const DEFAULT_SYSTEM_PROMPT = `Ты — продавец отдела продаж. Цель: записать клиента на Zoom-встречу. Отвечай коротко, не более 400 символов. Один вопрос за раз. Не упоминай слова "бот", "ИИ", "автоматический". Текущий этап: {{currentStep}}.`;
 
-/** Состояние диалога для квалификации (ТЗ: ниша, цель, объём, география). */
+/** Состояние диалога для квалификации и счётчика фраз в шаге. */
 export interface ConversationState {
   niche?: string;
   goal?: string;
   volume?: string;
   geography?: string;
   currentStep?: string;
+  /** Сколько сообщений бота отправлено в текущем шаге (для зафиксированных фраз). */
+  messageCountInStep?: number;
   lastUpdatedAt?: string;
 }
 
@@ -55,12 +57,15 @@ export class DialogService {
       });
     }
 
-    const nextStatus = this.getNextStatus(session.status);
+    const nextStatus = await this.getNextStatus(session.status);
     const now = new Date();
     const prevState = (session.conversationStateJson as ConversationState | null) ?? {};
+    const isNewStep = prevState.currentStep !== nextStatus;
+    const messageCountInStep = isNewStep ? 0 : (prevState.messageCountInStep ?? 0);
     const conversationStateJson: ConversationState = {
       ...prevState,
       currentStep: nextStatus,
+      messageCountInStep,
       lastUpdatedAt: now.toISOString(),
     };
 
@@ -73,8 +78,15 @@ export class DialogService {
       },
     });
 
+    const stepConfig = await this.getStepConfig(nextStatus);
+    const fixedPhrase = stepConfig?.phrases?.[messageCountInStep]?.fixed
+      ? stepConfig.phrases[messageCountInStep].text?.trim()
+      : null;
+
     let reply: string;
-    if (this.llm.isConfigured) {
+    if (fixedPhrase) {
+      reply = fixedPhrase;
+    } else if (this.llm.isConfigured) {
       const lastMessages = await this.prisma.message.findMany({
         where: { leadSessionId },
         orderBy: { createdAt: 'desc' },
@@ -87,7 +99,7 @@ export class DialogService {
           role: m.direction === 'IN' ? ('user' as const) : ('assistant' as const),
           content: m.text!,
         }));
-      const basePrompt = await this.getSystemPromptTemplate(nextStatus);
+      const basePrompt = await this.getSystemPromptTemplate(nextStatus, stepConfig);
       const systemPrompt = await this.buildSystemPromptWithRag(basePrompt, text);
       const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
       reply = llmReply && llmReply.length > 0 ? llmReply : this.buildReply(nextStatus);
@@ -106,30 +118,79 @@ export class DialogService {
       },
     });
 
+    const nextCount = messageCountInStep + 1;
     await this.prisma.leadSession.update({
       where: { id: leadSessionId },
-      data: { lastBotMessageAt: new Date() },
+      data: {
+        lastBotMessageAt: new Date(),
+        conversationStateJson: { ...conversationStateJson, messageCountInStep: nextCount } as object,
+      },
     });
 
     return reply;
   }
 
-  private getNextStatus(current: LeadSessionStatus): LeadSessionStatus {
-    switch (current) {
-      case LeadSessionStatus.PENDING_INIT:
-      case LeadSessionStatus.INIT_SENT:
-        return LeadSessionStatus.ENGAGED;
-      case LeadSessionStatus.ENGAGED:
-        return LeadSessionStatus.QUALIFYING;
-      case LeadSessionStatus.QUALIFYING:
-        return LeadSessionStatus.PRESENTING;
-      case LeadSessionStatus.PRESENTING:
-        return LeadSessionStatus.SCHEDULING_ZOOM;
-      case LeadSessionStatus.SCHEDULING_ZOOM:
-        return LeadSessionStatus.ZOOM_BOOKED;
-      default:
-        return current;
+  private async getOrderedSteps(): Promise<string[]> {
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { key: 'funnel_steps' },
+      });
+      const value = row?.value;
+      if (Array.isArray(value) && value.length > 0) {
+        const keys = value
+          .filter((s) => s && typeof s === 'object' && typeof (s as any).step === 'string')
+          .map((s) => String((s as any).step));
+        if (keys.length) return keys;
+      }
+    } catch {}
+    return ['ENGAGED', 'QUALIFYING', 'PRESENTING', 'SCHEDULING_ZOOM', 'ZOOM_BOOKED'];
+  }
+
+  private async getStepConfig(step: LeadSessionStatus): Promise<{ label: string; description: string; phrases: { text: string; fixed: boolean }[] } | null> {
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { key: 'funnel_steps' },
+      });
+      const value = row?.value;
+      if (Array.isArray(value)) {
+        const found = value.find((s: any) => s && s.step === step) as any;
+        if (found)
+          return {
+            label: typeof found.label === 'string' ? found.label : '',
+            description: typeof found.description === 'string' ? found.description : '',
+            phrases: Array.isArray(found.phrases)
+              ? found.phrases.map((p: any) => ({ text: typeof p?.text === 'string' ? p.text : '', fixed: !!p?.fixed }))
+              : [],
+          };
+      }
+    } catch {}
+    return null;
+  }
+
+  private async getRules(): Promise<{ refusals: string; negativity: string; outOfScope: string }> {
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { key: 'prompt_rules' },
+      });
+      const v = row?.value as any;
+      if (v && typeof v === 'object')
+        return {
+          refusals: typeof v.refusals === 'string' ? v.refusals : '',
+          negativity: typeof v.negativity === 'string' ? v.negativity : '',
+          outOfScope: typeof v.outOfScope === 'string' ? v.outOfScope : '',
+        };
+    } catch {}
+    return { refusals: '', negativity: '', outOfScope: '' };
+  }
+
+  private async getNextStatus(current: LeadSessionStatus): Promise<LeadSessionStatus> {
+    const ordered = await this.getOrderedSteps();
+    if (current === LeadSessionStatus.PENDING_INIT || current === LeadSessionStatus.INIT_SENT) {
+      return (ordered.includes('ENGAGED') ? LeadSessionStatus.ENGAGED : (ordered[0] as LeadSessionStatus)) ?? LeadSessionStatus.ENGAGED;
     }
+    const idx = ordered.indexOf(current);
+    if (idx >= 0 && idx < ordered.length - 1) return ordered[idx + 1] as LeadSessionStatus;
+    return current;
   }
 
   private buildReply(status: LeadSessionStatus): string {
@@ -173,7 +234,8 @@ export class DialogService {
   ): Promise<string> {
     const userMessages = [...history.map((m) => ({ role: m.role, content: m.content })), { role: 'user' as const, content: newUserText }];
     const syntheticStatus = this.getTestSyntheticStatus(userMessages.length);
-    const basePrompt = await this.getSystemPromptTemplate(syntheticStatus);
+    const stepConfig = await this.getStepConfig(syntheticStatus);
+    const basePrompt = await this.getSystemPromptTemplate(syntheticStatus, stepConfig);
     const systemPrompt = await this.buildSystemPromptWithRag(basePrompt, newUserText);
     if (this.llm.isConfigured) {
       const llmReply = await this.llm.generateReply(systemPrompt, userMessages);
@@ -182,17 +244,36 @@ export class DialogService {
     return this.buildReply(syntheticStatus);
   }
 
-  /** Берёт шаблон системного промпта из БД (ключ dialog_system) или дефолт. Подставляет {{currentStep}}. */
-  private async getSystemPromptTemplate(currentStep: LeadSessionStatus): Promise<string> {
+  /** Берёт шаблон системного промпта из БД или дефолт. Подставляет {{currentStep}}. Правила (Блок 3) — высший приоритет. */
+  private async getSystemPromptTemplate(
+    currentStep: LeadSessionStatus,
+    stepConfig?: { label: string; description: string; phrases: { text: string; fixed: boolean }[] } | null,
+  ): Promise<string> {
+    const rules = await this.getRules();
+    const rulesBlock = [rules.refusals, rules.negativity, rules.outOfScope]
+      .filter(Boolean)
+      .join('\n\n');
+    const rulesSection = rulesBlock
+      ? `\n\n---\nПравила (соблюдай в первую очередь):\n${rulesBlock}`
+      : '';
+
     const row = await this.prisma.prompt.findFirst({
       where: { key: DIALOG_SYSTEM_PROMPT_KEY, isActive: true },
       orderBy: { version: 'desc' },
     });
     const template = row?.content?.trim() || DEFAULT_SYSTEM_PROMPT;
     const withStep = template.replace(/\{\{\s*currentStep\s*\}\}/gi, String(currentStep));
+    const stepContext =
+      stepConfig?.description
+        ? `\n\nТекущий этап воронки: ${stepConfig.label}. Цель этапа: ${stepConfig.description}.`
+        : '';
+    const phrasesContext =
+      stepConfig?.phrases?.length
+        ? `\nВарианты фраз для этого этапа (используй по смыслу, если не отправлены дословно): ${stepConfig.phrases.map((p) => `«${p.text}»`).join('; ')}.`
+        : '';
     const nameRule =
-      '\n\nОбращение по имени: на этапе ENGAGED после приветствия задай один вопрос: «Напишите, пожалуйста, как к вам обращаться и чем занимается ваша компания?» Если клиент назвал имя — дальше обращайся по имени и на «вы». Если только про деятельность — обращайся только на «вы». Никогда не придумывай имена. Не начинай каждое сообщение со слова «Отлично» — чередуй начала фраз. База знаний: инструкции из блока «база знаний» выше всегда соблюдай при ответе. Сценарий: даже если клиент уходит от темы, отвечает невпопад или «несёт чушь» — оставайся в контексте задачи (квалификация → презентация → запись на Zoom), задавай вопросы по шагу воронки, мягко возвращай разговор к цели. Не поддерживай оффтоп — коротко отреагируй и задай следующий вопрос по сценарию.';
-    return withStep + nameRule;
+      '\n\nОбращение: если клиент назвал имя — обращайся по имени и на «вы», иначе только на «вы». Не придумывай имена. Не начинай каждое сообщение со слова «Отлично». База знаний: инструкции из блока ниже всегда соблюдай. Веди клиента по этапам воронки; при уходе от темы мягко возвращай к цели.';
+    return rulesSection + withStep + stepContext + phrasesContext + nameRule;
   }
 
   /** Добавляет к системному промпту релевантные фрагменты из базы знаний (инструкции для бота). */

@@ -15,14 +15,23 @@ import { PrismaService } from '../../database/prisma.service';
 
 const MAIN_PROMPT_KEY = 'dialog_system';
 const FUNNEL_STEPS_CONFIG_KEY = 'funnel_steps';
+const PROMPT_RULES_CONFIG_KEY = 'prompt_rules';
 
-const DEFAULT_FUNNEL_STEPS: { step: string; label: string; description: string }[] = [
-  { step: 'ENGAGED', label: 'Вовлечение', description: 'Первый контакт с лидом, установление диалога.' },
-  { step: 'QUALIFYING', label: 'Квалификация', description: 'Уточнение ниши, цели, объёма базы, географии.' },
-  { step: 'PRESENTING', label: 'Презентация', description: 'Рассказ о продукте/услуге и выгодах.' },
-  { step: 'SCHEDULING_ZOOM', label: 'Приглашение на Zoom', description: 'Предложение встречи в Zoom, выбор даты и времени.' },
-  { step: 'ZOOM_BOOKED', label: 'Zoom забронирован', description: 'Встреча подтверждена, ожидание звонка.' },
+const ALL_STEP_KEYS = ['ENGAGED', 'QUALIFYING', 'PRESENTING', 'SCHEDULING_ZOOM', 'ZOOM_BOOKED'] as const;
+
+const DEFAULT_FUNNEL_STEPS: { step: string; label: string; description: string; phrases: { text: string; fixed: boolean }[] }[] = [
+  { step: 'ENGAGED', label: 'Вовлечение', description: 'Первый контакт с лидом, установление диалога.', phrases: [] },
+  { step: 'QUALIFYING', label: 'Квалификация', description: 'Уточнение ниши, цели, объёма базы, географии.', phrases: [] },
+  { step: 'PRESENTING', label: 'Презентация', description: 'Рассказ о продукте/услуге и выгодах.', phrases: [] },
+  { step: 'SCHEDULING_ZOOM', label: 'Приглашение на Zoom', description: 'Предложение встречи в Zoom, выбор даты и времени.', phrases: [] },
+  { step: 'ZOOM_BOOKED', label: 'Zoom забронирован', description: 'Встреча подтверждена, ожидание звонка.', phrases: [] },
 ];
+
+const DEFAULT_RULES = {
+  refusals: '',
+  negativity: '',
+  outOfScope: '',
+};
 
 @Controller('admin/prompts')
 export class AdminPromptsController {
@@ -104,7 +113,7 @@ export class AdminPromptsController {
     return { content: created.content };
   }
 
-  /** Список шагов воронки (название и описание), для редактирования в админке. */
+  /** Список шагов воронки (название, описание, фразы с флагом «зафиксировать»). */
   @Get('funnel-steps')
   async getFunnelSteps() {
     try {
@@ -119,33 +128,93 @@ export class AdminPromptsController {
             step: String((s as any).step),
             label: typeof (s as any).label === 'string' ? (s as any).label : '',
             description: typeof (s as any).description === 'string' ? (s as any).description : '',
+            phrases: Array.isArray((s as any).phrases)
+              ? (s as any).phrases
+                  .filter((p: any) => p && typeof p === 'object')
+                  .map((p: any) => ({
+                    text: typeof p.text === 'string' ? p.text : '',
+                    fixed: !!p.fixed,
+                  }))
+              : [],
           }));
-        if (steps.length) return { steps };
+        if (steps.length) return { steps, allStepKeys: ALL_STEP_KEYS };
       }
     } catch {}
-    return { steps: DEFAULT_FUNNEL_STEPS };
+    return { steps: DEFAULT_FUNNEL_STEPS, allStepKeys: ALL_STEP_KEYS };
   }
 
-  /** Сохранить шаги воронки (названия и описания). Ключи step не меняются. */
+  /** Сохранить шаги воронки (порядок, названия, описания, фразы). Ключи step — из фиксированного набора. */
   @Put('funnel-steps')
-  async putFunnelSteps(@Body() body: { steps?: Array<{ step: string; label?: string; description?: string }> }) {
+  async putFunnelSteps(
+    @Body()
+    body: {
+      steps?: Array<{
+        step: string;
+        label?: string;
+        description?: string;
+        phrases?: Array<{ text: string; fixed?: boolean }>;
+      }>;
+    },
+  ) {
     const input = Array.isArray(body?.steps) ? body.steps : [];
-    const existingKeys = DEFAULT_FUNNEL_STEPS.map((s) => s.step);
-    const steps = existingKeys.map((key) => {
-      const found = input.find((s) => s?.step === key);
-      const def = DEFAULT_FUNNEL_STEPS.find((d) => d.step === key)!;
-      return {
-        step: key,
-        label: typeof found?.label === 'string' ? found.label.trim() || def.label : def.label,
-        description: typeof found?.description === 'string' ? found.description.trim() || def.description : def.description,
-      };
-    });
+    const steps = input
+      .filter((s) => s && ALL_STEP_KEYS.includes(s.step as any))
+      .map((s) => {
+        const def = DEFAULT_FUNNEL_STEPS.find((d) => d.step === s.step);
+        const phrases = Array.isArray(s.phrases)
+          ? s.phrases.map((p) => ({
+              text: typeof p?.text === 'string' ? p.text.trim() : '',
+              fixed: !!p?.fixed,
+            }))
+          : [];
+        return {
+          step: s.step,
+          label: typeof s.label === 'string' ? s.label.trim() || def?.label || '' : def?.label || '',
+          description: typeof s.description === 'string' ? s.description.trim() || def?.description || '' : def?.description || '',
+          phrases,
+        };
+      });
+    const unique = steps.filter((s, i) => steps.findIndex((x) => x.step === s.step) === i);
     await this.prisma.systemConfig.upsert({
       where: { key: FUNNEL_STEPS_CONFIG_KEY },
-      create: { key: FUNNEL_STEPS_CONFIG_KEY, value: steps as any },
-      update: { value: steps as any },
+      create: { key: FUNNEL_STEPS_CONFIG_KEY, value: unique as any },
+      update: { value: unique as any },
     });
-    return { steps };
+    return { steps: unique, allStepKeys: ALL_STEP_KEYS };
+  }
+
+  /** Правила и безопасность (приоритет над воронкой в промпте). */
+  @Get('rules')
+  async getRules() {
+    try {
+      const row = await this.prisma.systemConfig.findUnique({
+        where: { key: PROMPT_RULES_CONFIG_KEY },
+      });
+      const v = row?.value as any;
+      if (v && typeof v === 'object') {
+        return {
+          refusals: typeof v.refusals === 'string' ? v.refusals : DEFAULT_RULES.refusals,
+          negativity: typeof v.negativity === 'string' ? v.negativity : DEFAULT_RULES.negativity,
+          outOfScope: typeof v.outOfScope === 'string' ? v.outOfScope : DEFAULT_RULES.outOfScope,
+        };
+      }
+    } catch {}
+    return { ...DEFAULT_RULES };
+  }
+
+  @Put('rules')
+  async putRules(
+    @Body() body: { refusals?: string; negativity?: string; outOfScope?: string },
+  ) {
+    const refusals = typeof body?.refusals === 'string' ? body.refusals.trim() : '';
+    const negativity = typeof body?.negativity === 'string' ? body.negativity.trim() : '';
+    const outOfScope = typeof body?.outOfScope === 'string' ? body.outOfScope.trim() : '';
+    await this.prisma.systemConfig.upsert({
+      where: { key: PROMPT_RULES_CONFIG_KEY },
+      create: { key: PROMPT_RULES_CONFIG_KEY, value: { refusals, negativity, outOfScope } as any },
+      update: { value: { refusals, negativity, outOfScope } as any },
+    });
+    return { refusals, negativity, outOfScope };
   }
 
   @Get()
