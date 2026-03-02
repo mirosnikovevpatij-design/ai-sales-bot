@@ -117,6 +117,7 @@ function DashboardSection() {
   if (loading) return <p>Загрузка…</p>;
   if (error || !stats) return <p>{error ?? 'Нет данных'}</p>;
 
+  const sessionsByStatus = stats.sessionsByStatus && typeof stats.sessionsByStatus === 'object' ? stats.sessionsByStatus : {};
   const statusLabels: Record<string, string> = {
     PENDING_INIT: 'Ожидание init',
     INIT_SENT: 'Init отправлен',
@@ -171,7 +172,7 @@ function DashboardSection() {
           </tr>
         </thead>
         <tbody>
-          {Object.entries(stats.sessionsByStatus)
+          {Object.entries(sessionsByStatus)
             .sort((a, b) => b[1] - a[1])
             .map(([status, count]) => (
               <tr key={status}>
@@ -945,14 +946,15 @@ function TestSection() {
         })),
       }),
     })
-      .then((r) => {
-        if (!r.ok) throw new Error(String(r.status));
-        return r.json();
+      .then(async (r) => {
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(typeof data?.message === 'string' ? data.message : `Ошибка ${r.status}`);
+        return data as { reply: string };
       })
       .then((data: { reply: string }) => {
         setMessages((prev) => [...prev, { role: 'bot', text: data.reply }]);
       })
-      .catch(() => setError('Ошибка ответа бота'))
+      .catch((err: Error) => setError(err?.message ?? 'Ошибка ответа бота'))
       .finally(() => setLoading(false));
   };
 

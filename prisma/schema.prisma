@@ -213,16 +213,18 @@ model SystemConfig {
 }
 
 model Prompt {
-  id              Int      @id @default(autoincrement())
-  key             String   @unique
-  version         Int      @default(1)
-  isActive        Boolean  @default(true)
-  isAbTest        Boolean  @default(false)
+  id               Int      @id @default(autoincrement())
+  key              String
+  version          Int      @default(1)
+  isActive         Boolean  @default(true)
+  isAbTest         Boolean  @default(false)
   abTrafficPercent Int?
-  content         String
-  variablesDesc   Json?
-  createdBy       String?
-  createdAt       DateTime @default(now())
+  content          String
+  variablesDesc    Json?
+  createdBy        String?
+  createdAt        DateTime @default(now())
+
+  @@unique([key, version])
 }
 
 model KnowledgeDocument {

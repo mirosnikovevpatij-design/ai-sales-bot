@@ -17,27 +17,31 @@ export class AdminPromptsController {
 
   @Get()
   async list() {
-    const prompts = await this.prisma.prompt.findMany({
-      orderBy: [{ key: 'asc' }, { version: 'desc' }],
-    });
-    const byKey: Record<string, typeof prompts> = {};
-    for (const p of prompts) {
-      if (!byKey[p.key]) byKey[p.key] = [];
-      byKey[p.key].push(p);
+    try {
+      const prompts = await this.prisma.prompt.findMany({
+        orderBy: [{ key: 'asc' }, { version: 'desc' }],
+      });
+      const byKey: Record<string, typeof prompts> = {};
+      for (const p of prompts) {
+        if (!byKey[p.key]) byKey[p.key] = [];
+        byKey[p.key].push(p);
+      }
+      return Object.entries(byKey).map(([key, versions]) => ({
+        key,
+        versions: versions.map((v) => ({
+          id: v.id,
+          version: v.version,
+          isActive: v.isActive,
+          isAbTest: v.isAbTest,
+          abTrafficPercent: v.abTrafficPercent,
+          content: v.content,
+          variablesDesc: v.variablesDesc,
+          createdAt: v.createdAt,
+        })),
+      }));
+    } catch {
+      return [];
     }
-    return Object.entries(byKey).map(([key, versions]) => ({
-      key,
-      versions: versions.map((v) => ({
-        id: v.id,
-        version: v.version,
-        isActive: v.isActive,
-        isAbTest: v.isAbTest,
-        abTrafficPercent: v.abTrafficPercent,
-        content: v.content,
-        variablesDesc: v.variablesDesc,
-        createdAt: v.createdAt,
-      })),
-    }));
   }
 
   @Get('key/:key')

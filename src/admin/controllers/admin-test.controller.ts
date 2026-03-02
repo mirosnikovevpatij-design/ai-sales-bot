@@ -29,10 +29,18 @@ export class AdminTestController {
     @Param('sessionId') _sessionId: string,
     @Body() body: { text?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> },
   ) {
-    const text = (body?.text ?? '').trim() || '(пусто)';
-    const history = Array.isArray(body?.history) ? body.history : [];
-    const reply = await this.dialog.generateReplyForTest(history, text);
-    return { reply };
+    try {
+      const text = (body?.text ?? '').trim() || '(пусто)';
+      const history = Array.isArray(body?.history) ? body.history : [];
+      const reply = await this.dialog.generateReplyForTest(history, text);
+      return { reply: reply ?? 'Нет ответа от бота.' };
+    } catch (err: any) {
+      const message = err?.message || String(err);
+      throw new HttpException(
+        { message: `Ошибка ответа бота: ${message}` },
+        500,
+      );
+    }
   }
 
   @Post(':sessionId/end')
